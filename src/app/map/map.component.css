@@ -1,8 +1,29 @@
-#map {
-  height: 100vh; /* or any height you want */
-  width: 100%;
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
 }
+
+/* wrapper around #map in your template */
+.map-wrapper {
+  height: 100vh;          /* full viewport */
+  display: flex;
+  align-items: stretch;   /* child fills height */
+  justify-content: center;
+}
+
+/* make map fill the wrapper */
+#map {
+  width: 100%;
+  height: 100%;
+}
+
 .custom-bin-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.custom-department-icon {
   background: none !important;
   border: none !important;
 }
