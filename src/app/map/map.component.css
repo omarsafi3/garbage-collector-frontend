@@ -1,0 +1,27 @@
+#map {
+  height: 100vh; /* or any height you want */
+  width: 100%;
+}
+.custom-bin-icon {
+  background: none !important;
+  border: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 8px;
+  padding: 0;
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+  min-width: 200px;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.2);
+  }
+}

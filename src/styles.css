@@ -1,1 +1,7 @@
 /* You can add global styles to this file, and also import other style files */
+.leaflet-container .leaflet-control-layers-icon {
+  background-image: url('assets/leaflet/layers.png') !important;
+}
+.leaflet-container .leaflet-control-layers-icon2x {
+  background-image: url('assets/leaflet/layers-2x.png') !important;
+}
