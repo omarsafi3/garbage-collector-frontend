@@ -1,0 +1,108 @@
+<div class="modern-dashboard">
+
+    <!-- Top Bar -->
+    <div class="control-bar">
+        <div class="control-bar-left">
+            <h1>🚛 Fleet Operations</h1>
+            <div class="live-badge">
+                <span class="pulse-dot"></span>
+                Live Tracking
+            </div>
+        </div>
+
+        <div class="control-bar-stats">
+            <div class="stat-pill critical">
+                <span class="stat-number">{{ totalCriticalBins }}</span>
+                <span class="stat-label">Critical Bins</span>
+            </div>
+            <div class="stat-pill active">
+                <span class="stat-number">{{ activeTrucks.size }}</span>
+                <span class="stat-label">Active Trucks</span>
+            </div>
+            <div class="stat-pill critical">
+                <div class="stat-number">{{ departmentStats?.criticalBins || 0 }}</div>
+                <div class="stat-label">Critical Bins</div>
+            </div>
+
+            <div class="stat-pill active">
+                <div class="stat-number">{{ departmentStats?.activeVehicles || 0 }}</div>
+                <div class="stat-label">Active Trucks</div>
+            </div>
+
+            <div class="stat-pill" style="background: linear-gradient(135deg, #10b981, #059669); color: white;">
+                <div class="stat-number">{{ departmentStats?.averageFillLevel || 0 }}%</div>
+                <div class="stat-label">Avg Fill</div>
+            </div>
+
+        </div>
+
+        <div class="control-bar-actions">
+            <button class="action-btn primary" (click)="loadDepartments()">🔄 Refresh</button>
+            <button class="action-btn success" (click)="showDepartmentRoutes()">🗺️ Show Routes</button>
+            <button class="action-btn danger" (click)="executeAllRoutes()">🚀 Execute All</button>
+        </div>
+    </div>
+
+    <!-- Main Split -->
+    <div class="main-content">
+
+        <!-- LEFT: Vehicles -->
+        <div class="vehicles-section">
+            <div class="section-header">
+                <h2>Active Vehicles</h2>
+                <span class="vehicle-count">{{ selectedDeptVehicles.length }} trucks</span>
+            </div>
+
+            <div class="vehicles-horizontal-grid">
+                <div class="vehicle-card-horizontal" *ngFor="let vehicle of selectedDeptVehicles">
+
+                    <div class="vehicle-card-top">
+                        <div class="vehicle-icon-large">🚛</div>
+                        <div class="vehicle-info-compact">
+                            <h3>{{ vehicle.reference }}</h3>
+                            <div class="plate-badge">{{ vehicle.plate }}</div>
+                        </div>
+                        <span class="status-dot" [ngClass]="vehicle.available ? 'ready' : 'active'">
+                            {{ vehicle.available ? '✓ Ready' : '🔄 Active' }}
+                        </span>
+                    </div>
+
+                    <div class="fill-section">
+                        <div class="fill-header">
+                            <span>Truck Fill</span>
+                            <strong>{{ vehicle.fillLevel | number:'1.0-0' }}%</strong>
+                        </div>
+                        <div class="fill-bar-container">
+                            <div class="fill-bar-track"></div>
+                            <div class="fill-bar-progress" [style.width.%]="vehicle.fillLevel"
+                                [style.background]="getFillGradient(vehicle.fillLevel)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="progress-info" *ngIf="getVehicleProgress(vehicle.id)">
+                        <span class="progress-text">{{ getVehicleProgress(vehicle.id) }}</span>
+                    </div>
+
+                    <div class="card-actions-horizontal">
+                        <button class="btn-icon preview" (click)="showVehicleRoute(vehicle.id)"
+                            [disabled]="!vehicle.available">🗺️</button>
+                        <button class="btn-icon execute" (click)="dispatchVehicle(vehicle)"
+                            [disabled]="!vehicle.available">▶️</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Map -->
+        <div class="map-section">
+            <div class="section-header">
+                <h2>Live Map</h2>
+            </div>
+            <div class="map-container-small">
+                <app-map></app-map>
+            </div>
+        </div>
+
+    </div>
+</div>

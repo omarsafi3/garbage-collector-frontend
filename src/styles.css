@@ -1,4 +1,29 @@
-/* You can add global styles to this file, and also import other style files */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+app-root {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+app-dashboard {
+  display: block;
+  width: 100%;
+  height: 100%;
+}/* You can add global styles to this file, and also import other style files */
 .leaflet-container .leaflet-control-layers-icon {
   background-image: url('assets/leaflet/layers.png') !important;
 }

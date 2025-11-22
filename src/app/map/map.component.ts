@@ -1,69 +1,252 @@
 import { Component, OnInit, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
-
-import { RouteService } from '../services/route.service';
-import { RouteBin } from '../models/route';
-import { DepartmentRoute } from '../models/department-route';
-import { BinService } from '../services/bin-service.service';
-import { WebSocketService } from '../services/web-socket-service.service';
+import { BinService } from '../services/bin-service';
 import { DepartmentService } from '../services/department.service';
-import { Bin } from '../models/bin';
-import { Department } from '../models/department';
+import { WebSocketService } from '../services/web-socket-service';
+import { FormsModule } from '@angular/forms'; 
+import {
+  Bin,
+  Department,
+  TruckPositionUpdate,
+  RouteProgressUpdate,
+  RouteCompletionEvent
+} from '../models/websocket-dtos';
+import { RouteService } from '../services/route.service';  // ✅ ADD THIS
+
 
 @Component({
   selector: 'app-map',
   templateUrl: './map.component.html',
   styleUrls: ['./map.component.css'],
   standalone: true,
-  imports: []
+  imports: [CommonModule, FormsModule]
 })
 export class MapComponent implements OnInit, OnDestroy {
   private map: any;
   private markers: Map<string, any> = new Map();
   private departmentMarkers: Map<string, any> = new Map();
   private L: any;
+  availableVehicles: any[] = [];
+  selectedVehicleId: string = '';
+  // WebSocket subscriptions
   private wsSubscription?: Subscription;
+  private truckPositionSub?: Subscription;
+  private routeProgressSub?: Subscription;
+  private routeCompletionSub?: Subscription;
 
-  // Single-vehicle route state
-  private routePolyline?: any;
+  // Visual elements
+  private routePolylines: Map<string, any> = new Map();
+  activeTrucks: Map<string, any> = new Map();
   private routeMarkers: any[] = [];
-  private routeSub?: Subscription;
-
-  // Multi-vehicle (department) routes
-  private routePolylines: any[] = [];
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: Object,
     private binService: BinService,
     private webSocketService: WebSocketService,
     private departmentService: DepartmentService,
-    private routeService: RouteService
-  ) {}
+    private routeService: RouteService  // ✅ ADD THIS LINE
+  ) { }
 
   async ngOnInit() {
     if (isPlatformBrowser(this.platformId)) {
       this.L = await import('leaflet');
       this.initMap(this.L);
+      this.loadDepartments(this.L);
+      this.loadBins(this.L);
 
       this.webSocketService.connect('http://localhost:8080/ws');
-      this.wsSubscription = this.webSocketService.getBinUpdates().subscribe(
-        (updatedBin: Bin) => {
-          this.updateBinMarker(updatedBin);
-        }
-      );
+      this.setupWebSocketListeners();
     }
   }
 
   ngOnDestroy() {
-    if (this.wsSubscription) {
-      this.wsSubscription.unsubscribe();
-    }
-    if (this.routeSub) {
-      this.routeSub.unsubscribe();
-    }
+    this.wsSubscription?.unsubscribe();
+    this.truckPositionSub?.unsubscribe();
+    this.routeProgressSub?.unsubscribe();
+    this.routeCompletionSub?.unsubscribe();
     this.webSocketService.disconnect();
   }
+
+  // ============ WEBSOCKET LISTENERS ============
+
+  private setupWebSocketListeners() {
+    this.wsSubscription = this.webSocketService.getBinUpdates().subscribe(
+      (updatedBin: Bin) => this.updateBinMarker(updatedBin)
+    );
+
+    this.truckPositionSub = this.webSocketService.getTruckPositionUpdates().subscribe(
+      (update: TruckPositionUpdate) => {
+        this.updateTruckPosition(update.vehicleId, update.latitude, update.longitude, update.progressPercent);
+      }
+    );
+
+    this.routeProgressSub = this.webSocketService.getRouteProgressUpdates().subscribe(
+      (update: RouteProgressUpdate) => {
+        this.showRouteProgress(update.vehicleId, update.currentStop, update.totalStops, update.vehicleFillLevel);
+      }
+    );
+
+    this.routeCompletionSub = this.webSocketService.getRouteCompletionUpdates().subscribe(
+      (event: RouteCompletionEvent) => {
+        this.onRouteComplete(event.vehicleId, event.binsCollected);
+      }
+    );
+  }
+  // ============ BACKEND-MANAGED ROUTE EXECUTION ============
+
+  executeManagedRoute(departmentId: string, vehicleId: string) {
+    console.log(`🚀 Executing managed route for vehicle ${vehicleId}`);
+
+    this.routeService.executeManagedRoute(departmentId, vehicleId).subscribe({
+      next: (data: any) => {  // ✅ ADD : any
+        console.log('✅ Route started:', data);
+        this.showNotification(`Route started for vehicle ${vehicleId}`);
+      },
+      error: (error: any) => {  // ✅ ADD : any
+        console.error('❌ Failed to start route:', error);
+        this.showNotification('Failed to start route');
+      }
+    });
+  }
+
+
+  // ✅ Helper to convert Map to Array for *ngFor
+  getActiveTrucksArray() {
+    return Array.from(this.activeTrucks.entries()).map(([vehicleId, truck]) => ({
+      vehicleId,
+      progress: truck.progress || 0
+    }));
+  }
+
+  // ============ TRUCK VISUALIZATION ============
+
+  private updateTruckPosition(vehicleId: string, lat: number, lng: number, progress: number) {
+    let truck = this.activeTrucks.get(vehicleId);
+
+    if (!truck) {
+      truck = this.createTruckMarker(vehicleId, lat, lng);
+      this.activeTrucks.set(vehicleId, truck);
+    } else {
+      truck.marker.setLatLng([lat, lng]);
+    }
+
+    this.updateTruckProgressIndicator(vehicleId, progress);
+  }
+
+  private createTruckMarker(vehicleId: string, lat: number, lng: number) {
+    const truckIcon = this.L.divIcon({
+      html: `
+        <div class="truck-marker" style="
+          width: 52px; height: 52px; border-radius: 50%;
+          background: linear-gradient(145deg, #2563eb 0%, #3b82f6 100%);
+          display: flex; align-items: center; justify-content: center;
+          box-shadow: 0 8px 20px rgba(37,99,235,0.25);
+          border: 3px solid white;
+          position: relative;
+        ">
+          <div style="font-size:28px; z-index:2;">🚛</div>
+          <div class="truck-fill-indicator" style="
+            position: absolute; bottom: 7px; left: 11px; right: 11px;
+            height: 0px;
+            background: linear-gradient(180deg, #4ade80 0%, #22d3ee 100%);
+            border-radius: 3px;
+            transition: height 0.7s, background 0.7s;
+            z-index:1;
+          "></div>
+          <div class="truck-fill-percent" style="
+            position: absolute; top: 5px; right: 5px;
+            font-size: 10px; color: white; font-weight: 800;
+            background: rgba(0,0,0,0.75);
+            padding: 3px 4px; border-radius: 4px;
+            z-index:3;
+          ">0%</div>
+        </div>
+      `,
+      className: '',
+      iconSize: [52, 52],
+      iconAnchor: [26, 26]
+    });
+
+    const marker = this.L.marker([lat, lng], { icon: truckIcon }).addTo(this.map);
+    marker.bindPopup(`Vehicle ${vehicleId}<br>Progress: 0%`);
+
+    return { marker, vehicleId };
+  }
+
+  private updateTruckProgressIndicator(vehicleId: string, progress: number) {
+    const truck = this.activeTrucks.get(vehicleId);
+    if (!truck) return;
+
+    const fillLevel = progress;
+    const fillHeight = Math.max(0, fillLevel * 0.24);
+
+    const element = truck.marker.getElement();
+    if (element) {
+      const indicator = element.querySelector('.truck-fill-indicator') as HTMLElement;
+      const percent = element.querySelector('.truck-fill-percent') as HTMLElement;
+
+      if (indicator) {
+        indicator.style.height = `${fillHeight}px`;
+
+        if (fillLevel < 50) {
+          indicator.style.background = 'linear-gradient(180deg, #4ade80 0%, #22d3ee 100%)';
+        } else if (fillLevel < 80) {
+          indicator.style.background = 'linear-gradient(180deg, #facc15 0%, #f97316 100%)';
+        } else {
+          indicator.style.background = 'linear-gradient(180deg, #fb7185 0%, #ef4444 100%)';
+        }
+      }
+
+      if (percent) {
+        percent.textContent = `${Math.round(fillLevel)}%`;
+      }
+    }
+
+    truck.marker.setPopupContent(`Vehicle ${vehicleId}<br>Progress: ${progress.toFixed(1)}%`);
+  }
+
+  private showRouteProgress(vehicleId: string, currentStop: number, totalStops: number, fillLevel: number) {
+    console.log(`📊 Vehicle ${vehicleId}: Stop ${currentStop}/${totalStops} (Fill: ${fillLevel}%)`);
+    this.updateTruckProgressIndicator(vehicleId, fillLevel);
+    this.showNotification(`🚛 Vehicle ${vehicleId} collected bin (${currentStop}/${totalStops})`);
+  }
+
+  private onRouteComplete(vehicleId: string, binsCollected: number) {
+    console.log(`✅ Vehicle ${vehicleId} completed route: ${binsCollected} bins`);
+
+    const truck = this.activeTrucks.get(vehicleId);
+    if (truck) {
+      const element = truck.marker.getElement();
+      if (element) {
+        element.style.animation = 'pulse 1s';
+      }
+
+      setTimeout(() => {
+        if (this.map.hasLayer(truck.marker)) {
+          this.map.removeLayer(truck.marker);
+        }
+        this.activeTrucks.delete(vehicleId);
+      }, 5000);
+    }
+
+    this.showNotification(`✅ Route completed: ${binsCollected} bins collected!`);
+  }
+
+  clearAllRoutes() {
+    this.routePolylines.forEach(p => this.map.removeLayer(p));
+    this.routePolylines.clear();
+    this.routeMarkers.forEach(m => this.map.removeLayer(m));
+    this.routeMarkers = [];
+    this.activeTrucks.forEach(t => this.map.removeLayer(t.marker));
+    this.activeTrucks.clear();
+  }
+
+  private showNotification(message: string) {
+    console.log(`🔔 ${message}`);
+  }
+
+  // ============ MAP INITIALIZATION ============
 
   private initMap(L: any) {
     const tunisiaBounds = L.latLngBounds(L.latLng(30.0, 7.5), L.latLng(37.5, 12.0));
@@ -77,268 +260,103 @@ export class MapComponent implements OnInit, OnDestroy {
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '© OpenStreetMap contributors'
     }).addTo(this.map);
+  }
 
-    this.loadDepartments(L);
-    this.loadBins(L);
+  // ============ BIN VISUALIZATION ============
 
-    // Bin placement on click
-    this.map.on('click', async (e: any) => {
-      const { lat, lng } = e.latlng;
-      const snappedCoords = await this.snapToRoad(lng, lat);
-
-      if (!snappedCoords) {
-        alert('Cannot place a bin here. Please click closer to a road.');
-        return;
-      }
-      const fillLevel = prompt('Enter initial fill level (0-100):', '0');
-      if (fillLevel === null) return;
-
-      const bin: Partial<Bin> = {
-        latitude: snappedCoords.lat,
-        longitude: snappedCoords.lng,
-        fillLevel: Number(fillLevel),
-        status: 'normal'
-      };
-
-      this.binService.addBin(bin).subscribe((savedBin: Bin) => {
-        this.addBinMarker(L, savedBin);
-      });
+  private loadBins(L: any) {
+    this.binService.getAllBins().subscribe((bins: Bin[]) => {
+      bins.forEach(bin => this.addBinMarker(L, bin));
     });
   }
 
-  /** Snap to nearest road segment using OSRM */
-  private async snapToRoad(lng: number, lat: number): Promise<{ lat: number; lng: number } | null> {
-    try {
-      const response = await fetch(
-        `https://router.project-osrm.org/nearest/v1/driving/${lng},${lat}?number=1`
-      );
-      const data = await response.json();
-      if (data.code === 'Ok' && data.waypoints && data.waypoints.length > 0) {
-        const snapped = data.waypoints[0].location;
-        return { lng: snapped[0], lat: snapped[1] };
+  private addBinMarker(L: any, bin: Bin) {
+    const color = this.getColorForFillLevel(bin.fillLevel);
+    const icon = this.createBinIcon(L, color, bin.fillLevel);
+    const marker = L.marker([bin.latitude, bin.longitude], { icon }).addTo(this.map);
+    marker.bindPopup(this.createPopupContent(bin, color));
+    this.markers.set(bin.id, marker);
+  }
+
+  private updateBinMarker(bin: Bin) {
+    const existingMarker = this.markers.get(bin.id);
+    if (existingMarker) {
+      const color = this.getColorForFillLevel(bin.fillLevel);
+      const icon = this.createBinIcon(this.L, color, bin.fillLevel);
+      existingMarker.setIcon(icon);
+      existingMarker.setPopupContent(this.createPopupContent(bin, color));
+      const element = existingMarker.getElement();
+      if (element) {
+        element.style.animation = 'pulse 0.5s';
+        setTimeout(() => { element.style.animation = ''; }, 500);
       }
-      return null;
-    } catch (error) {
-      console.error('Error snapping to road:', error);
-      return null;
-    }
-  }
-
-  // ---------------- ROUTE LOGIC --------------------
-
-  /** Single vehicle: draw the optimal route for given departmentId and vehicleId */
-  showRoute(departmentId: string, vehicleId: string) {
-    if (this.routeSub) this.routeSub.unsubscribe();
-    this.routeSub = this.routeService
-      .getOptimizedRoute(departmentId, vehicleId)
-      .subscribe(routeBins => {
-        console.log('optimized route from backend', routeBins);
-        this.drawRoute(routeBins);
-      });
-    console.log('showRoute called with', departmentId, vehicleId);
-  }
-
-  /** NEW: show all routes for a department (multi-vehicle) */
-  showDepartmentRoutes(departmentId: string) {
-    if (this.routeSub) this.routeSub.unsubscribe();
-    this.routeSub = this.routeService
-      .getDepartmentRoutes(departmentId)
-      .subscribe(routes => {
-        console.log('department routes', routes);
-        this.drawDepartmentRoutes(routes);
-      });
-    console.log('showDepartmentRoutes called with', departmentId);
-  }
-
-  /** Single-vehicle: road-following route including depot → bins → depot */
-  private async drawRoute(route: RouteBin[]) {
-    if (!this.map) return;
-
-    const depotLat = 34.0;  // TODO: replace with real department lat
-    const depotLng = 9.0;   // TODO: replace with real department lng
-
-    console.log('[Map] drawRoute road-based, bins:', route);
-
-    // clear previous single-vehicle polyline and markers
-    if (this.routePolyline) {
-      this.map.removeLayer(this.routePolyline);
-      this.routePolyline = undefined;
-    }
-    this.routeMarkers.forEach(m => this.map.removeLayer(m));
-    this.routeMarkers = [];
-
-    // also clear multi-vehicle polylines when switching mode
-    this.routePolylines.forEach(p => this.map.removeLayer(p));
-    this.routePolylines = [];
-
-    const stops: { lat: number; lng: number }[] = [
-      { lat: depotLat, lng: depotLng },
-      ...route.map(b => ({ lat: b.latitude, lng: b.longitude })),
-      { lat: depotLat, lng: depotLng }
-    ];
-
-    let fullCoords: [number, number][] = [];
-    for (let i = 0; i < stops.length - 1; i++) {
-      const from = stops[i];
-      const to = stops[i + 1];
-      const seg = await this.getRoadPolyline(from.lat, from.lng, to.lat, to.lng);
-      if (seg.length > 0) {
-        if (fullCoords.length > 0) {
-          fullCoords = fullCoords.concat(seg.slice(1));
-        } else {
-          fullCoords = fullCoords.concat(seg);
-        }
-      }
-    }
-
-    if (fullCoords.length === 0) {
-      console.warn('[Map] No OSRM geometry, falling back to straight lines');
-      const straight = stops.map(p => [p.lat, p.lng] as [number, number]);
-      this.routePolyline = this.L.polyline(straight, { color: 'blue', weight: 7, opacity: 0.75 }).addTo(this.map);
     } else {
-      this.routePolyline = this.L.polyline(fullCoords, { color: 'blue', weight: 7, opacity: 0.75 }).addTo(this.map);
+      this.addBinMarker(this.L, bin);
     }
-
-    const depotMarker = this.L.marker([depotLat, depotLng]).bindPopup('Depot');
-    depotMarker.addTo(this.map);
-    this.routeMarkers.push(depotMarker);
-
-    route.forEach((bin, idx) => {
-      const marker = this.L.marker([bin.latitude, bin.longitude])
-        .bindPopup(`Stop #${idx + 1}<br>Bin ${bin.id}`);
-      marker.addTo(this.map);
-      this.routeMarkers.push(marker);
-    });
-
-    this.map.fitBounds(this.routePolyline.getBounds());
   }
 
-  /** NEW: draw multiple routes for a department (one polyline per vehicle, straight for now) */
-  /** NEW: draw multiple road-following routes for a department (one polyline per vehicle) */
-private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
-  if (!this.map) return;
-
-  // clear single-vehicle polyline and markers
-  if (this.routePolyline) {
-    this.map.removeLayer(this.routePolyline);
-    this.routePolyline = undefined;
+  private createPopupContent(bin: Bin, color: string): string {
+    return `
+      <div style="text-align: center;">
+        <strong>Bin ID: ${bin.id}</strong><br>
+        <div style="margin: 8px 0;">
+          <div style="background: #e0e0e0; border-radius: 10px; height: 20px; width: 100%; position: relative;">
+            <div style="background: ${color}; border-radius: 10px; height: 100%; width: ${bin.fillLevel}%; transition: width 0.3s;"></div>
+          </div>
+          <strong>${bin.fillLevel}%</strong> Full
+        </div>
+        Status: <span style="color: ${color}; font-weight: bold;">${bin.status}</span>
+        <br><small style="color: #666;">Last updated: ${new Date().toLocaleTimeString()}</small>
+      </div>
+    `;
   }
-  this.routeMarkers.forEach(m => this.map.removeLayer(m));
-  this.routeMarkers = [];
 
-  // clear old department polylines
-  this.routePolylines.forEach(p => this.map.removeLayer(p));
-  this.routePolylines = [];
-
-  if (!routes || routes.length === 0) return;
-
-  const colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown'];
-  const allLatLngs: [number, number][][] = [];
-
-  // For now: same fixed depot; later plug real dept coordinates
-  const depotLat = 34.0;
-  const depotLng = 9.0;
-
-  for (let rIndex = 0; rIndex < routes.length; rIndex++) {
-    const route = routes[rIndex];
-    const bins = route.bins;
-    if (!bins || bins.length === 0) continue;
-
-    const color = colors[rIndex % colors.length];
-
-    // Build stops: depot -> bins -> depot
-    const stops: { lat: number; lng: number }[] = [
-      { lat: depotLat, lng: depotLng },
-      ...bins.map(b => ({ lat: b.latitude, lng: b.longitude })),
-      { lat: depotLat, lng: depotLng }
-    ];
-
-    let fullCoords: [number, number][] = [];
-    for (let i = 0; i < stops.length - 1; i++) {
-      const from = stops[i];
-      const to = stops[i + 1];
-      const seg = await this.getRoadPolyline(from.lat, from.lng, to.lat, to.lng);
-      if (seg.length > 0) {
-        if (fullCoords.length > 0) {
-          fullCoords = fullCoords.concat(seg.slice(1));
-        } else {
-          fullCoords = fullCoords.concat(seg);
-        }
-      }
-    }
-
-    if (fullCoords.length === 0) {
-      // fallback: straight segments depot -> bins -> depot
-      const straight = stops.map(p => [p.lat, p.lng] as [number, number]);
-      fullCoords = straight;
-    }
-
-    allLatLngs.push(fullCoords);
-
-    const polyline = this.L.polyline(fullCoords, {
-      color,
-      weight: 6,
-      opacity: 0.8
-    }).addTo(this.map);
-
-    this.routePolylines.push(polyline);
-
-    // markers for this vehicle’s bins
-    bins.forEach((bin, i) => {
-      const marker = this.L.marker([bin.latitude, bin.longitude])
-        .bindPopup(`Vehicle ${route.vehicleId}<br>Stop #${i + 1}<br>Bin ${bin.id}`);
-      marker.addTo(this.map);
-      this.routeMarkers.push(marker);
+  private createBinIcon(L: any, color: string, fillLevel: number) {
+    const svgIcon = `
+      <svg width="40" height="50" viewBox="0 0 40 50" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="20" cy="48" rx="8" ry="2" fill="rgba(0,0,0,0.3)"/>
+        <path d="M 12 18 L 10 45 Q 10 47 12 47 L 28 47 Q 30 47 30 45 L 28 18 Z"
+              fill="${color}" stroke="#333" stroke-width="1.5"/>
+        <rect x="8" y="15" width="24" height="4" rx="2"
+              fill="${color}" stroke="#333" stroke-width="1.5"/>
+        <rect x="16" y="12" width="8" height="3" rx="1.5"
+              fill="#666" stroke="#333" stroke-width="1"/>
+        <path d="M 12.5 ${45 - (fillLevel * 0.25)} L 11 45 Q 11 46 12 46 L 28 46 Q 29 46 29 45 L 27.5 ${45 - (fillLevel * 0.25)} Z"
+              fill="${this.getDarkerColor(color)}" opacity="0.7"/>
+        <text x="20" y="32" font-size="12" text-anchor="middle" fill="white" font-weight="bold">♻</text>
+        <circle cx="32" cy="10" r="8" fill="white" stroke="${color}" stroke-width="2"/>
+        <text x="32" y="13" font-size="8" text-anchor="middle" fill="${color}" font-weight="bold">${fillLevel}%</text>
+      </svg>
+    `;
+    return this.L.divIcon({
+      html: svgIcon,
+      className: 'custom-bin-icon',
+      iconSize: [40, 50],
+      iconAnchor: [20, 50],
+      popupAnchor: [0, -50]
     });
   }
 
-  // fit map to all polylines
-  const allPoints = allLatLngs.flat();
-  if (allPoints.length > 0) {
-    const bounds = this.L.latLngBounds(allPoints);
-    this.map.fitBounds(bounds);
-  }
-}
-
-
-  private async getRoadPolyline(
-    fromLat: number, fromLng: number,
-    toLat: number, toLng: number
-  ): Promise<[number, number][]> {
-    const url =
-      `https://router.project-osrm.org/route/v1/driving/` +
-      `${fromLng},${fromLat};${toLng},${toLat}?overview=full&geometries=geojson`;
-
-    try {
-      const resp = await fetch(url);
-      const data = await resp.json();
-
-      if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
-        console.warn('OSRM returned no route for segment', { fromLat, fromLng, toLat, toLng, data });
-        return [];
-      }
-
-      const coords: [number, number][] =
-        data.routes[0].geometry.coordinates.map((c: [number, number]) => [c[1], c[0]]);
-      return coords;
-    } catch (e) {
-      console.error('OSRM error for segment', e);
-      return [];
-    }
-  }
-
-  // ---------------- DEPARTMENTS --------------------
+  // ============ DEPARTMENT VISUALIZATION ============
 
   private loadDepartments(L: any) {
     this.departmentService.getAllDepartments().subscribe((depts: Department[]) => {
       depts.forEach((dept) => {
         const deptIcon = this.createDepartmentIcon(L);
-        const marker = L.marker([dept.latitude!, dept.longitude!], { icon: deptIcon }).addTo(this.map);
-        marker.on('click', () => {
-          this.loadDepartmentDetails(dept.id!, marker);
-        });
+        const marker = L.marker([dept.latitude, dept.longitude], { icon: deptIcon }).addTo(this.map);
+        marker.on('click', () => this.loadDepartmentDetails(dept.id, marker));
         marker.bindPopup(this.createDepartmentLoadingPopup(dept));
-        this.departmentMarkers.set(dept.id!, marker);
+        this.departmentMarkers.set(dept.id, marker);
+      });
+    });
+  }
+
+  private loadDepartmentDetails(deptId: string, marker: any) {
+    this.departmentService.getDepartmentEmployees(deptId).subscribe(employees => {
+      this.departmentService.getDepartmentVehicles(deptId).subscribe(vehicles => {
+        this.departmentService.getDepartmentById(deptId).subscribe(dept => {
+          marker.setPopupContent(this.createDepartmentDetailPopup(dept, employees, vehicles));
+        });
       });
     });
   }
@@ -353,16 +371,6 @@ private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
         </div>
       </div>
     `;
-  }
-
-  private loadDepartmentDetails(deptId: string, marker: any) {
-    this.departmentService.getDepartmentEmployees(deptId).subscribe(employees => {
-      this.departmentService.getDepartmentVehicles(deptId).subscribe(vehicles => {
-        this.departmentService.getDepartmentById(deptId).subscribe(dept => {
-          marker.setPopupContent(this.createDepartmentDetailPopup(dept, employees, vehicles));
-        });
-      });
-    });
   }
 
   private createDepartmentDetailPopup(dept: Department, employees: any[], vehicles: any[]): string {
@@ -455,7 +463,6 @@ private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
         <text x="40" y="16" font-size="10" text-anchor="middle" fill="#2563eb" font-weight="bold">D</text>
       </svg>
     `;
-
     return this.L.divIcon({
       html: svgIcon,
       className: 'custom-department-icon',
@@ -465,89 +472,7 @@ private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
     });
   }
 
-  // ---------------- BINS ----------------
-
-  private loadBins(L: any) {
-    this.binService.getAllBins().subscribe((bins: Bin[]) => {
-      bins.forEach(bin => {
-        this.addBinMarker(L, bin);
-      });
-    });
-  }
-
-  private addBinMarker(L: any, bin: Bin) {
-    const color = this.getColorForFillLevel(bin.fillLevel);
-    const icon = this.createBinIcon(L, color, bin.fillLevel);
-
-    const marker = L.marker([bin.latitude, bin.longitude], { icon }).addTo(this.map);
-    marker.bindPopup(this.createPopupContent(bin, color));
-    this.markers.set(bin.id!, marker);
-  }
-
-  private updateBinMarker(bin: Bin) {
-    const existingMarker = this.markers.get(bin.id!);
-
-    if (existingMarker) {
-      const color = this.getColorForFillLevel(bin.fillLevel);
-      const icon = this.createBinIcon(this.L, color, bin.fillLevel);
-
-      existingMarker.setIcon(icon);
-      existingMarker.setPopupContent(this.createPopupContent(bin, color));
-
-      const element = existingMarker.getElement();
-      if (element) {
-        element.style.animation = 'pulse 0.5s';
-        setTimeout(() => {
-          element.style.animation = '';
-        }, 500);
-      }
-    } else {
-      this.addBinMarker(this.L, bin);
-    }
-  }
-
-  private createPopupContent(bin: Bin, color: string): string {
-    return `
-      <div style="text-align: center;">
-        <strong>Bin ID: ${bin.id}</strong><br>
-        <div style="margin: 8px 0;">
-          <div style="background: #e0e0e0; border-radius: 10px; height: 20px; width: 100%; position: relative;">
-            <div style="background: ${color}; border-radius: 10px; height: 100%; width: ${bin.fillLevel}%; transition: width 0.3s;"></div>
-          </div>
-          <strong>${bin.fillLevel}%</strong> Full
-        </div>
-        Status: <span style="color: ${color}; font-weight: bold;">${bin.status}</span>
-        <br><small style="color: #666;">Last updated: ${new Date().toLocaleTimeString()}</small>
-      </div>
-    `;
-  }
-
-  private createBinIcon(L: any, color: string, fillLevel: number) {
-    const svgIcon = `
-      <svg width="40" height="50" viewBox="0 0 40 50" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="20" cy="48" rx="8" ry="2" fill="rgba(0,0,0,0.3)"/>
-        <path d="M 12 18 L 10 45 Q 10 47 12 47 L 28 47 Q 30 47 30 45 L 28 18 Z"
-              fill="${color}" stroke="#333" stroke-width="1.5"/>
-        <rect x="8" y="15" width="24" height="4" rx="2"
-              fill="${color}" stroke="#333" stroke-width="1.5"/>
-        <rect x="16" y="12" width="8" height="3" rx="1.5"
-              fill="#666" stroke="#333" stroke-width="1"/>
-        <path d="M 12.5 ${45 - (fillLevel * 0.25)} L 11 45 Q 11 46 12 46 L 28 46 Q 29 46 29 45 L 27.5 ${45 - (fillLevel * 0.25)} Z"
-              fill="${this.getDarkerColor(color)}" opacity="0.7"/>
-        <text x="20" y="32" font-size="12" text-anchor="middle" fill="white" font-weight="bold">♻</text>
-        <circle cx="32" cy="10" r="8" fill="white" stroke="${color}" stroke-width="2"/>
-        <text x="32" y="13" font-size="8" text-anchor="middle" fill="${color}" font-weight="bold">${fillLevel}%</text>
-      </svg>
-    `;
-
-    return this.L.divIcon({
-      html: svgIcon,
-      className: 'custom-bin-icon',
-      iconSize: [40, 50],
-      iconAnchor: [20, 50],
-      popupAnchor: [0, -50]
-    });
-  }
+  // ============ COLOR HELPERS ============
 
   private getColorForFillLevel(fillLevel: number): string {
     if (fillLevel < 25) {
@@ -564,11 +489,9 @@ private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
   private interpolateColor(color1: string, color2: string, factor: number): string {
     const c1 = this.hexToRgb(color1);
     const c2 = this.hexToRgb(color2);
-
     const r = Math.round(c1.r + factor * (c2.r - c1.r));
     const g = Math.round(c1.g + factor * (c2.g - c1.g));
     const b = Math.round(c1.b + factor * (c2.b - c1.b));
-
     return `rgb(${r}, ${g}, ${b})`;
   }
 
@@ -584,7 +507,7 @@ private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
   private getDarkerColor(color: string): string {
     if (color.startsWith('rgb')) {
       const matches = color.match(/\d+/g);
-      if (matches) {
+      if (matches && matches.length >= 3) {
         const r = Math.max(0, parseInt(matches[0]) - 40);
         const g = Math.max(0, parseInt(matches[1]) - 40);
         const b = Math.max(0, parseInt(matches[2]) - 40);
@@ -592,5 +515,147 @@ private async drawDepartmentRoutes(routes: DepartmentRoute[]) {
       }
     }
     return color;
+  }
+  showDepartmentRoutesWithPolylines(departmentId: string) {
+  console.log(`🗺️ Loading all vehicle routes for department ${departmentId}`);
+  
+  this.routeService.getDepartmentRoutesWithPolylines(departmentId).subscribe({
+    next: (routesData: any[]) => {
+      console.log('✅ Received routes:', routesData);
+      this.drawAllVehicleRoutes(routesData);
+      
+      // ✅ ALSO load available vehicles
+      this.availableVehicles = routesData.map(route => ({
+        vehicleId: route.vehicleId,
+        binCount: route.bins.length
+      }));
+      
+      if (this.availableVehicles.length > 0) {
+        this.selectedVehicleId = this.availableVehicles[0].vehicleId;
+      }
+    },
+    error: (error: any) => {
+      console.error('❌ Failed to load routes:', error);
+      this.showNotification('Failed to load routes');
+    }
+  });
+}
+
+
+  private drawAllVehicleRoutes(routesData: any[]) {
+    this.clearAllRoutes();
+
+    if (routesData.length === 0) {
+      this.showNotification('No routes available');
+      return;
+    }
+
+    const colors = ['#2563eb', '#ef4444', '#16a34a', '#f97316', '#8b5cf6', '#ec4899'];
+
+    routesData.forEach((routeData, index) => {
+      const vehicleId = routeData.vehicleId;
+      const bins = routeData.bins;
+      const polyline = routeData.polyline;
+      const color = colors[index % colors.length];
+
+      console.log(`🚛 Drawing route for vehicle ${vehicleId}: ${bins.length} bins`);
+
+      // Draw polyline
+      if (polyline && polyline.length > 0) {
+        const latLngs = polyline.map((point: any) => [point[0], point[1]]);
+
+        const line = this.L.polyline(latLngs, {
+          color: color,
+          weight: 5,
+          opacity: 0.7,
+          dashArray: '5, 5'
+        }).addTo(this.map);
+
+        this.routePolylines.set(vehicleId, line);
+      }
+
+      // Add bin markers
+      bins.forEach((bin: any, stopIndex: number) => {
+        const marker = this.L.marker([bin.latitude, bin.longitude], {
+          title: `Stop ${stopIndex + 1} - Vehicle ${vehicleId}`
+        })
+          .bindPopup(`🚛 Vehicle: ${vehicleId}<br>Stop #${stopIndex + 1}<br>Bin: ${bin.id}`)
+          .addTo(this.map);
+
+        this.routeMarkers.push(marker);
+      });
+    });
+
+    // Fit map to all routes
+    if (this.routePolylines.size > 0) {
+      const allBounds = Array.from(this.routePolylines.values())
+        .map((p: any) => p.getBounds());
+
+      if (allBounds.length > 0) {
+        const combinedBounds = allBounds[0];
+        allBounds.slice(1).forEach(b => combinedBounds.extend(b));
+        this.map.fitBounds(combinedBounds);
+      }
+    }
+
+    this.showNotification(`📍 Showing ${routesData.length} vehicle routes`);
+  }
+  loadAvailableVehicles(departmentId: string) {
+    console.log('🚛 Loading available vehicles...');
+
+    // We'll get vehicles from the routes endpoint
+    this.routeService.getDepartmentRoutesWithPolylines(departmentId).subscribe({
+      next: (routesData: any[]) => {
+        this.availableVehicles = routesData.map(route => ({
+          vehicleId: route.vehicleId,
+          binCount: route.bins.length
+        }));
+
+        if (this.availableVehicles.length > 0) {
+          this.selectedVehicleId = this.availableVehicles[0].vehicleId;
+        }
+
+        console.log('✅ Loaded vehicles:', this.availableVehicles);
+      },
+      error: (error: any) => {
+        console.error('❌ Failed to load vehicles:', error);
+      }
+    });
+  }
+
+  executeSelectedVehicle() {
+    if (!this.selectedVehicleId) {
+      this.showNotification('Please select a vehicle');
+      return;
+    }
+
+    console.log(`🚀 Executing route for vehicle ${this.selectedVehicleId}`);
+
+    this.routeService.executeManagedRoute('6920266d0b737026e2496c54', this.selectedVehicleId).subscribe({
+      next: (data: any) => {
+        console.log('✅ Route started:', data);
+        this.showNotification(`Route started for vehicle ${this.selectedVehicleId}`);
+      },
+      error: (error: any) => {
+        console.error('❌ Failed to start route:', error);
+        this.showNotification('Failed to start route');
+      }
+    });
+  }
+
+  executeAllVehicles() {
+    console.log('🚀🚀 Executing routes for ALL vehicles');
+
+    this.routeService.executeAllManagedRoutes('6920266d0b737026e2496c54').subscribe({
+      next: (data: any) => {
+        console.log('✅ All routes started:', data);
+        const count = data.totalVehicles || 0;
+        this.showNotification(`Started routes for ${count} vehicles!`);
+      },
+      error: (error: any) => {
+        console.error('❌ Failed to start routes:', error);
+        this.showNotification('Failed to start routes');
+      }
+    });
   }
 }

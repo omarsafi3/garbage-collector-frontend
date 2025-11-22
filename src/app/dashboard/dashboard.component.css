@@ -1,0 +1,425 @@
+/* ========================================
+   MODERN HORIZONTAL DASHBOARD
+   ======================================== */
+:host {
+  all: initial;
+  display: block !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.modern-dashboard {
+  width: 100vw !important;
+  height: 100vh !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  overflow: hidden !important;
+  position: relative !important;
+}
+
+/* ✅ TOP CONTROL BAR */
+.control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 30px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+.control-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.control-bar-left h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.live-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #10b981;
+  color: white;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background: white;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.control-bar-stats {
+  display: flex;
+  gap: 15px;
+}
+
+.stat-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 24px;
+  border-radius: 12px;
+  min-width: 100px;
+}
+
+.stat-pill.critical {
+  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+  color: white;
+}
+
+.stat-pill.active {
+  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  color: white;
+}
+
+.stat-number {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-label {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.9;
+  margin-top: 4px;
+}
+
+.control-bar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.action-btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-btn.primary {
+  background: #667eea;
+  color: white;
+}
+
+.action-btn.primary:hover {
+  background: #5568d3;
+  transform: translateY(-2px);
+}
+
+.action-btn.success {
+  background: #10b981;
+  color: white;
+}
+
+.action-btn.success:hover {
+  background: #059669;
+  transform: translateY(-2px);
+}
+
+.action-btn.danger {
+  background: #ef4444;
+  color: white;
+}
+
+.action-btn.danger:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+}
+
+/* ✅ MAIN CONTENT: HORIZONTAL SPLIT */
+.main-content {
+  display: flex;
+  flex: 1;
+  gap: 20px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+/* ✅ LEFT: VEHICLES SECTION (60%) */
+.vehicles-section {
+  flex: 0 0 50%;  /* ✅ 50% width - gives more space to map */
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.section-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.vehicle-count {
+  padding: 4px 12px;
+  background: #e0e7ff;
+  color: #667eea;
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.vehicles-horizontal-grid {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  overflow-y: auto;
+  padding-right: 10px;
+}
+
+/* Custom Scrollbar */
+.vehicles-horizontal-grid::-webkit-scrollbar {
+  width: 6px;
+}
+
+.vehicles-horizontal-grid::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+.vehicles-horizontal-grid::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.vehicles-horizontal-grid::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* ✅ HORIZONTAL VEHICLE CARD */
+.vehicle-card-horizontal {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.vehicle-card-horizontal:hover {
+  border-color: #667eea;
+  box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+  transform: translateY(-2px);
+}
+
+.vehicle-card-top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.vehicle-icon-large {
+  font-size: 48px;
+  line-height: 1;
+}
+
+.vehicle-info-compact {
+  flex: 1;
+}
+
+.vehicle-info-compact h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+}
+
+.plate-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #f1f5f9;
+  color: #64748b;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.status-dot {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.status-dot.ready {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-dot.active {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+/* ✅ FILL SECTION */
+.fill-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fill-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.fill-header strong {
+  font-size: 16px;
+  color: #1a202c;
+}
+
+.fill-bar-container {
+  position: relative;
+  height: 24px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.fill-bar-track {
+  position: absolute;
+  inset: 0;
+  background: #f1f5f9;
+}
+
+.fill-bar-progress {
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  transition: width 0.5s ease, background 0.5s ease;
+}
+
+/* ✅ PROGRESS INFO */
+.progress-info {
+  padding: 8px 12px;
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
+  border-radius: 6px;
+}
+
+.progress-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
+}
+
+/* ✅ CARD ACTIONS */
+.card-actions-horizontal {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-icon {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 20px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-icon.preview {
+  background: #e0e7ff;
+}
+
+.btn-icon.preview:hover {
+  background: #c7d2fe;
+  transform: scale(1.05);
+}
+
+.btn-icon.execute {
+  background: #d1fae5;
+}
+
+.btn-icon.execute:hover {
+  background: #a7f3d0;
+  transform: scale(1.05);
+}
+
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* ✅ RIGHT: MAP SECTION (40%) */
+.map-section {
+  flex: 0 0 49%;  /* ✅ 50% width */
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 16px;
+  padding: 20px;
+  overflow: hidden;
+}
+
+
+.map-container-small {
+  flex: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid #e2e8f0;
+}
+
+.map-container-small app-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+* {
+  max-width: 100vw !important;
+  max-height: 100vh !important;
+}
+
+body, html {
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
