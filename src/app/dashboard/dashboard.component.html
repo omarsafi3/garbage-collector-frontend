@@ -12,92 +12,170 @@
 
         <div class="control-bar-stats">
             <div class="stat-pill critical">
-                <span class="stat-number">{{ totalCriticalBins }}</span>
-                <span class="stat-label">Critical Bins</span>
-            </div>
-            <div class="stat-pill active">
-                <span class="stat-number">{{ activeTrucks.size }}</span>
-                <span class="stat-label">Active Trucks</span>
-            </div>
-            <div class="stat-pill critical">
                 <div class="stat-number">{{ departmentStats?.criticalBins || 0 }}</div>
                 <div class="stat-label">Critical Bins</div>
             </div>
 
             <div class="stat-pill active">
-                <div class="stat-number">{{ departmentStats?.activeVehicles || 0 }}</div>
+                <div class="stat-number">{{ activeTrucks.size }}</div>
                 <div class="stat-label">Active Trucks</div>
             </div>
 
-            <div class="stat-pill" style="background: linear-gradient(135deg, #10b981, #059669); color: white;">
+            <div class="stat-pill"
+                style="background: linear-gradient(135deg, #10b981, #059669); color: white; box-shadow: 0 8px 30px rgba(16, 185, 129, 0.3); border: 1px solid rgba(52, 211, 153, 0.3);">
                 <div class="stat-number">{{ departmentStats?.averageFillLevel || 0 }}%</div>
                 <div class="stat-label">Avg Fill</div>
             </div>
-
-        </div>
-
-        <div class="control-bar-actions">
-            <button class="action-btn primary" (click)="loadDepartments()">🔄 Refresh</button>
-            <button class="action-btn success" (click)="showDepartmentRoutes()">🗺️ Show Routes</button>
-            <button class="action-btn danger" (click)="executeAllRoutes()">🚀 Execute All</button>
         </div>
     </div>
 
     <!-- Main Split -->
     <div class="main-content">
 
-        <!-- LEFT: Vehicles -->
-        <div class="vehicles-section">
-            <div class="section-header">
-                <h2>Active Vehicles</h2>
-                <span class="vehicle-count">{{ selectedDeptVehicles.length }} trucks</span>
-            </div>
+        <!-- LEFT: Vehicles + Active Routes -->
+        <div class="left-column">
 
-            <div class="vehicles-horizontal-grid">
-                <div class="vehicle-card-horizontal" *ngFor="let vehicle of selectedDeptVehicles">
-
-                    <div class="vehicle-card-top">
-                        <div class="vehicle-icon-large">🚛</div>
-                        <div class="vehicle-info-compact">
-                            <h3>{{ vehicle.reference }}</h3>
-                            <div class="plate-badge">{{ vehicle.plate }}</div>
-                        </div>
-                        <span class="status-dot" [ngClass]="vehicle.available ? 'ready' : 'active'">
-                            {{ vehicle.available ? '✓ Ready' : '🔄 Active' }}
-                        </span>
+            <!-- ✅ Active Routes Section -->
+            <div class="active-routes-section" *ngIf="activeTrucks.size > 0">
+                <div class="section-header">
+                    <div class="section-title-group">
+                        <h2>🚦 Active Routes</h2>
+                        <span class="route-count">{{ activeTrucks.size }} running</span>
                     </div>
+                </div>
 
-                    <div class="fill-section">
-                        <div class="fill-header">
-                            <span>Truck Fill</span>
-                            <strong>{{ vehicle.fillLevel | number:'1.0-0' }}%</strong>
+                <div class="active-routes-grid">
+                    <div class="active-route-card" *ngFor="let truck of getActiveTrucksArray(); let i = index">
+                        <div class="route-card-header">
+                            <!-- ✅ Add colored dot matching route -->
+                            <span class="route-vehicle">
+                                <span [style.color]="getRouteColor(i)" style="font-size: 20px;">●</span>
+                                🚛 {{ getVehicleName(truck.vehicleId) }}
+                            </span>
+                            <span class="route-progress-badge">{{ truck.progress?.toFixed(0) || 0 }}%</span>
                         </div>
-                        <div class="fill-bar-container">
-                            <div class="fill-bar-track"></div>
-                            <div class="fill-bar-progress" [style.width.%]="vehicle.fillLevel"
-                                [style.background]="getFillGradient(vehicle.fillLevel)">
+                        <div class="route-progress-bar">
+                            <div class="route-progress-fill" [style.width.%]="truck.progress || 0"
+                                [style.background]="getProgressGradient(truck.progress || 0)">
                             </div>
                         </div>
-                    </div>
-
-                    <div class="progress-info" *ngIf="getVehicleProgress(vehicle.id)">
-                        <span class="progress-text">{{ getVehicleProgress(vehicle.id) }}</span>
-                    </div>
-
-                    <div class="card-actions-horizontal">
-                        <button class="btn-icon preview" (click)="showVehicleRoute(vehicle.id)"
-                            [disabled]="!vehicle.available">🗺️</button>
-                        <button class="btn-icon execute" (click)="dispatchVehicle(vehicle)"
-                            [disabled]="!vehicle.available">▶️</button>
+                        <div class="route-details" *ngIf="getVehicleProgress(truck.vehicleId)">
+                            <span class="route-detail-text">{{ getVehicleProgress(truck.vehicleId) }}</span>
+                        </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Vehicles Section -->
+            <div class="vehicles-section">
+                <div class="section-header">
+                    <h2>🚗 Active Vehicles</h2>
+                    <div class="header-actions">
+                        <span class="vehicle-count">{{ selectedDeptVehicles.length }} trucks</span>
+
+                        <!-- ✅ Dispatch All button -->
+                        <button class="action-btn success" (click)="dispatchAllAvailable()"
+                            [disabled]="getAvailableVehiclesOnly().length === 0">
+                            🚀 Dispatch All Available ({{ getAvailableVehiclesOnly().length }})
+                        </button>
+                    </div>
+                </div>
+
+                <div class="vehicles-horizontal-grid">
+                    <div class="vehicle-card-horizontal" *ngFor="let vehicle of selectedDeptVehicles"
+                        [class.vehicle-active]="activeTrucks.has(vehicle.id)">
+
+                        <div class="vehicle-card-top">
+                            <div class="vehicle-icon-large">🚛</div>
+                            <div class="vehicle-info-compact">
+                                <h3>{{ vehicle.reference }}</h3>
+                                <div class="plate-badge">{{ vehicle.plate }}</div>
+                            </div>
+                            <span class="status-dot" [ngClass]="getVehicleStatusClass(vehicle.id, vehicle.available)">
+                                {{ getVehicleStatusText(vehicle.id, vehicle.available) }}
+                            </span>
+                        </div>
+
+                        <div class="fill-section">
+                            <div class="fill-header">
+                                <span>Truck Fill</span>
+                                <strong>{{ vehicle.fillLevel | number:'1.0-0' }}%</strong>
+                            </div>
+                            <div class="fill-bar-container">
+                                <div class="fill-bar-track"></div>
+                                <div class="fill-bar-progress" [style.width.%]="vehicle.fillLevel"
+                                    [style.background]="getFillGradient(vehicle.fillLevel)">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="progress-info"
+                            *ngIf="getVehicleProgress(vehicle.id) || unloadingVehicles.has(vehicle.id)">
+                            <span class="progress-text" *ngIf="!unloadingVehicles.has(vehicle.id)">
+                                {{ getVehicleProgress(vehicle.id) }}
+                            </span>
+                            <span class="progress-text unloading" *ngIf="unloadingVehicles.has(vehicle.id)">
+                                🏭 Unloading at depot... {{ vehicle.fillLevel | number:'1.0-0' }}%
+                            </span>
+                        </div>
+
+                        <!-- ✅ Route selection + Dispatch -->
+                        <div class="card-actions" *ngIf="!activeTrucks.has(vehicle.id) && vehicle.available">
+                            <!-- Route selector dropdown with color-coded options -->
+                            <!-- Route selector dropdown with color-coded options -->
+                            <select [(ngModel)]="vehicle.selectedRouteId" class="route-selector"
+                                [disabled]="availableRoutes.length === 0"
+                                style="width: 100%; padding: 10px; margin-bottom: 8px; border: 2px solid #d1d5db; border-radius: 8px; font-size: 13px; font-family: inherit; cursor: pointer; background: white; transition: border-color 0.2s;">
+                                <option value="">📍 Select a route...</option>
+                                <option *ngFor="let route of availableRoutes; let i = index" [value]="route.routeId">
+                                    {{ getRouteColorEmoji(i) }} Route {{ i + 1 }} ({{ route.binCount }} bins)
+                                </option>
+                            </select>
+
+
+                            <!-- Dispatch button -->
+                            <button class="btn-dispatch"
+                                (click)="dispatchVehicleWithRoute(vehicle.id, vehicle.selectedRouteId || '')"
+                                [disabled]="!vehicle['selectedRouteId']" [class.disabled]="!vehicle['selectedRouteId']"
+                                style="width: 100%; padding: 12px; border: none; border-radius: 8px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
+                                🚀 Dispatch Vehicle
+                            </button>
+                        </div>
+
+                        <!-- Show status when in route -->
+                        <div class="card-actions" *ngIf="activeTrucks.has(vehicle.id)">
+                            <div class="in-route-badge"
+                                style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
+                                🔄 In Route
+                            </div>
+                        </div>
+
+                        <!-- Show unavailable status -->
+                        <div class="card-actions" *ngIf="!vehicle.available && !activeTrucks.has(vehicle.id)">
+                            <div class="in-route-badge"
+                                style="background: linear-gradient(135deg, #9ca3af, #6b7280); color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px;">
+                                ⏸️ Busy
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
         <!-- RIGHT: Map -->
         <div class="map-section">
             <div class="section-header">
-                <h2>Live Map</h2>
+                <h2>🗺️ Live Map</h2>
+                <!-- ✅ Route control buttons next to map title -->
+                <div class="route-actions">
+                    <button class="route-btn show" (click)="showAllRoutes()">
+                        🗺️ Show All Routes
+                    </button>
+                    <button class="route-btn clear" (click)="clearAllRoutes()">
+                        🧹 Clear Routes
+                    </button>
+                </div>
             </div>
             <div class="map-container-small">
                 <app-map></app-map>
@@ -105,4 +183,64 @@
         </div>
 
     </div>
+
+    <!-- ✅ Analytics Section -->
+    <div class="analytics-section" *ngIf="selectedDepartment && analyticsData">
+        <h3 class="section-title">📊 Analytics Overview (Last 30 Days)</h3>
+
+        <div class="analytics-grid">
+            <!-- CO2 Card -->
+            <div class="analytics-card co2-card">
+                <div class="card-icon">🌍</div>
+                <div class="card-content">
+                    <h4>CO2 Emissions</h4>
+                    <div class="metric-value">{{ analyticsData.totalCO2EmissionsKg | number:'1.0-0' }} kg</div>
+                    <div class="metric-detail">🌳 {{ analyticsData.treesNeededToOffset | number:'1.0-0' }} trees to
+                        offset</div>
+                    <div class="metric-small">Avg: {{ analyticsData.avgCO2PerRoute | number:'1.0-0' }} kg/route</div>
+                </div>
+            </div>
+
+            <!-- Cost Card -->
+            <div class="analytics-card cost-card">
+                <div class="card-icon">💰</div>
+                <div class="card-content">
+                    <h4>Total Cost</h4>
+                    <div class="metric-value">€{{ analyticsData.totalCostEuros | number:'1.0-2' }}</div>
+                    <div class="metric-detail">⛽ {{ analyticsData.totalFuelLiters | number:'1.0-0' }} L fuel</div>
+                    <div class="metric-small">Avg: €{{ analyticsData.avgCostPerRoute | number:'1.0-2' }}/route</div>
+                </div>
+            </div>
+
+            <!-- Efficiency Card -->
+            <div class="analytics-card efficiency-card">
+                <div class="card-icon">⚡</div>
+                <div class="card-content">
+                    <h4>Efficiency</h4>
+                    <div class="metric-value">{{ analyticsData.totalBinsCollected }} bins</div>
+                    <div class="metric-detail">📍 {{ analyticsData.totalDistanceKm | number:'1.0-2' }} km</div>
+                    <div class="metric-small">{{ analyticsData.totalRoutes }} routes completed</div>
+                </div>
+            </div>
+
+            <!-- Recent Routes Card -->
+            <div class="analytics-card routes-card">
+                <div class="card-icon">🚛</div>
+                <div class="card-content">
+                    <h4>Recent Routes</h4>
+                    <div class="recent-routes-list" *ngIf="recentRoutes.length > 0">
+                        <div class="route-item" *ngFor="let route of recentRoutes">
+                            <span class="route-vehicle">{{ route.vehicleReference }}</span>
+                            <span class="route-bins">{{ route.binsCollected }} bins</span>
+                            <span class="route-distance">{{ route.totalDistanceKm | number:'1.0-0' }} km</span>
+                        </div>
+                    </div>
+                    <div class="metric-small" *ngIf="recentRoutes.length === 0">
+                        No routes yet
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
 </div>

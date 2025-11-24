@@ -4,7 +4,7 @@ import { Subscription } from 'rxjs';
 import { BinService } from '../services/bin-service';
 import { DepartmentService } from '../services/department.service';
 import { WebSocketService } from '../services/web-socket-service';
-import { FormsModule } from '@angular/forms'; 
+import { FormsModule } from '@angular/forms';
 import {
   Bin,
   Department,
@@ -12,8 +12,7 @@ import {
   RouteProgressUpdate,
   RouteCompletionEvent
 } from '../models/websocket-dtos';
-import { RouteService } from '../services/route.service';  // ✅ ADD THIS
-
+import { RouteService } from '../services/route.service';
 
 @Component({
   selector: 'app-map',
@@ -29,13 +28,15 @@ export class MapComponent implements OnInit, OnDestroy {
   private L: any;
   availableVehicles: any[] = [];
   selectedVehicleId: string = '';
+
   // WebSocket subscriptions
   private wsSubscription?: Subscription;
   private truckPositionSub?: Subscription;
   private routeProgressSub?: Subscription;
   private routeCompletionSub?: Subscription;
 
-  // Visual elements
+  // ✅ FIXED: Single marker per vehicle
+  private vehicleMarkers: Map<string, any> = new Map();
   private routePolylines: Map<string, any> = new Map();
   activeTrucks: Map<string, any> = new Map();
   private routeMarkers: any[] = [];
@@ -45,7 +46,7 @@ export class MapComponent implements OnInit, OnDestroy {
     private binService: BinService,
     private webSocketService: WebSocketService,
     private departmentService: DepartmentService,
-    private routeService: RouteService  // ✅ ADD THIS LINE
+    private routeService: RouteService
   ) { }
 
   async ngOnInit() {
@@ -57,8 +58,33 @@ export class MapComponent implements OnInit, OnDestroy {
 
       this.webSocketService.connect('http://localhost:8080/ws');
       this.setupWebSocketListeners();
+
+      // ✅ CRITICAL FIX: Listen for vehicle-started event from dashboard
+      window.addEventListener('vehicle-started', (e: any) => {
+        const { vehicleId } = e.detail;
+        console.log('🎯 Map received vehicle-started event:', vehicleId);
+        this.activeTrucks.set(vehicleId, {
+          vehicleId: vehicleId,
+          progress: 0
+        });
+      });
+
+      // Handle show-all-routes event
+      window.addEventListener('show-all-routes', (e: any) => {
+        const departmentId = e.detail?.departmentId;
+        if (departmentId) {
+          console.log('📍 Dashboard requested show routes for:', departmentId);
+          this.loadAvailableRoutes(departmentId);
+        }
+      });
+
+      window.addEventListener('clear-all-routes', () => {
+        console.log('🧹 Dashboard requested clear routes');
+        this.clearAllRoutes();
+      });
     }
   }
+
 
   ngOnDestroy() {
     this.wsSubscription?.unsubscribe();
@@ -68,6 +94,11 @@ export class MapComponent implements OnInit, OnDestroy {
     this.webSocketService.disconnect();
   }
 
+  getVehicleName(vehicleId: string): string {
+    const vehicle = this.availableVehicles.find((v: any) => v.id === vehicleId || v.vehicleId === vehicleId || v.routeId === vehicleId);
+    return vehicle?.reference || `Route ${vehicleId.substring(vehicleId.lastIndexOf('-') + 1)}`;
+  }
+
   // ============ WEBSOCKET LISTENERS ============
 
   private setupWebSocketListeners() {
@@ -75,15 +106,20 @@ export class MapComponent implements OnInit, OnDestroy {
       (updatedBin: Bin) => this.updateBinMarker(updatedBin)
     );
 
+    // ✅ FIXED: Only update vehicles that are ACTIVE
     this.truckPositionSub = this.webSocketService.getTruckPositionUpdates().subscribe(
       (update: TruckPositionUpdate) => {
-        this.updateTruckPosition(update.vehicleId, update.latitude, update.longitude, update.progressPercent);
+        if (this.activeTrucks.has(update.vehicleId)) {
+          this.updateTruckPosition(update.vehicleId, update.latitude, update.longitude, update.progressPercent);
+        }
       }
     );
 
     this.routeProgressSub = this.webSocketService.getRouteProgressUpdates().subscribe(
       (update: RouteProgressUpdate) => {
-        this.showRouteProgress(update.vehicleId, update.currentStop, update.totalStops, update.vehicleFillLevel);
+        if (this.activeTrucks.has(update.vehicleId)) {
+          this.showRouteProgress(update.vehicleId, update.currentStop, update.totalStops, update.vehicleFillLevel);
+        }
       }
     );
 
@@ -93,25 +129,7 @@ export class MapComponent implements OnInit, OnDestroy {
       }
     );
   }
-  // ============ BACKEND-MANAGED ROUTE EXECUTION ============
 
-  executeManagedRoute(departmentId: string, vehicleId: string) {
-    console.log(`🚀 Executing managed route for vehicle ${vehicleId}`);
-
-    this.routeService.executeManagedRoute(departmentId, vehicleId).subscribe({
-      next: (data: any) => {  // ✅ ADD : any
-        console.log('✅ Route started:', data);
-        this.showNotification(`Route started for vehicle ${vehicleId}`);
-      },
-      error: (error: any) => {  // ✅ ADD : any
-        console.error('❌ Failed to start route:', error);
-        this.showNotification('Failed to start route');
-      }
-    });
-  }
-
-
-  // ✅ Helper to convert Map to Array for *ngFor
   getActiveTrucksArray() {
     return Array.from(this.activeTrucks.entries()).map(([vehicleId, truck]) => ({
       vehicleId,
@@ -122,66 +140,67 @@ export class MapComponent implements OnInit, OnDestroy {
   // ============ TRUCK VISUALIZATION ============
 
   private updateTruckPosition(vehicleId: string, lat: number, lng: number, progress: number) {
-    let truck = this.activeTrucks.get(vehicleId);
+    const truck = this.activeTrucks.get(vehicleId);
+    if (truck) {
+      truck.progress = progress;
+      truck.latitude = lat;
+      truck.longitude = lng;
+    }
 
-    if (!truck) {
-      truck = this.createTruckMarker(vehicleId, lat, lng);
-      this.activeTrucks.set(vehicleId, truck);
+    let marker = this.vehicleMarkers.get(vehicleId);
+
+    if (!marker) {
+      const truckIcon = this.L.divIcon({
+        html: `
+          <div class="truck-marker" style="
+            width: 52px; height: 52px; border-radius: 50%;
+            background: linear-gradient(145deg, #2563eb 0%, #3b82f6 100%);
+            display: flex; align-items: center; justify-content: center;
+            box-shadow: 0 8px 20px rgba(37,99,235,0.25);
+            border: 3px solid white;
+            position: relative;
+          ">
+            <div style="font-size:28px; z-index:2;">🚛</div>
+            <div class="truck-fill-indicator" style="
+              position: absolute; bottom: 7px; left: 11px; right: 11px;
+              height: 0px;
+              background: linear-gradient(180deg, #4ade80 0%, #22d3ee 100%);
+              border-radius: 3px;
+              transition: height 0.7s, background 0.7s;
+              z-index:1;
+            "></div>
+            <div class="truck-fill-percent" style="
+              position: absolute; top: 5px; right: 5px;
+              font-size: 10px; color: white; font-weight: 800;
+              background: rgba(0,0,0,0.75);
+              padding: 3px 4px; border-radius: 4px;
+              z-index:3;
+            ">0%</div>
+          </div>
+        `,
+        className: '',
+        iconSize: [52, 52],
+        iconAnchor: [26, 26]
+      });
+
+      marker = this.L.marker([lat, lng], { icon: truckIcon }).addTo(this.map);
+      marker.bindPopup(`🚛 Vehicle ${vehicleId.substring(0, 8)}<br>Progress: 0%`);
+      this.vehicleMarkers.set(vehicleId, marker);
     } else {
-      truck.marker.setLatLng([lat, lng]);
+      marker.setLatLng([lat, lng]);
     }
 
     this.updateTruckProgressIndicator(vehicleId, progress);
   }
 
-  private createTruckMarker(vehicleId: string, lat: number, lng: number) {
-    const truckIcon = this.L.divIcon({
-      html: `
-        <div class="truck-marker" style="
-          width: 52px; height: 52px; border-radius: 50%;
-          background: linear-gradient(145deg, #2563eb 0%, #3b82f6 100%);
-          display: flex; align-items: center; justify-content: center;
-          box-shadow: 0 8px 20px rgba(37,99,235,0.25);
-          border: 3px solid white;
-          position: relative;
-        ">
-          <div style="font-size:28px; z-index:2;">🚛</div>
-          <div class="truck-fill-indicator" style="
-            position: absolute; bottom: 7px; left: 11px; right: 11px;
-            height: 0px;
-            background: linear-gradient(180deg, #4ade80 0%, #22d3ee 100%);
-            border-radius: 3px;
-            transition: height 0.7s, background 0.7s;
-            z-index:1;
-          "></div>
-          <div class="truck-fill-percent" style="
-            position: absolute; top: 5px; right: 5px;
-            font-size: 10px; color: white; font-weight: 800;
-            background: rgba(0,0,0,0.75);
-            padding: 3px 4px; border-radius: 4px;
-            z-index:3;
-          ">0%</div>
-        </div>
-      `,
-      className: '',
-      iconSize: [52, 52],
-      iconAnchor: [26, 26]
-    });
-
-    const marker = this.L.marker([lat, lng], { icon: truckIcon }).addTo(this.map);
-    marker.bindPopup(`Vehicle ${vehicleId}<br>Progress: 0%`);
-
-    return { marker, vehicleId };
-  }
-
   private updateTruckProgressIndicator(vehicleId: string, progress: number) {
-    const truck = this.activeTrucks.get(vehicleId);
-    if (!truck) return;
+    const marker = this.vehicleMarkers.get(vehicleId);
+    if (!marker) return;
 
     const fillLevel = progress;
     const fillHeight = Math.max(0, fillLevel * 0.24);
 
-    const element = truck.marker.getElement();
+    const element = marker.getElement();
     if (element) {
       const indicator = element.querySelector('.truck-fill-indicator') as HTMLElement;
       const percent = element.querySelector('.truck-fill-percent') as HTMLElement;
@@ -203,42 +222,52 @@ export class MapComponent implements OnInit, OnDestroy {
       }
     }
 
-    truck.marker.setPopupContent(`Vehicle ${vehicleId}<br>Progress: ${progress.toFixed(1)}%`);
+    marker.setPopupContent(`🚛 Vehicle ${vehicleId.substring(0, 8)}<br>Progress: ${progress.toFixed(1)}%`);
   }
 
   private showRouteProgress(vehicleId: string, currentStop: number, totalStops: number, fillLevel: number) {
     console.log(`📊 Vehicle ${vehicleId}: Stop ${currentStop}/${totalStops} (Fill: ${fillLevel}%)`);
     this.updateTruckProgressIndicator(vehicleId, fillLevel);
-    this.showNotification(`🚛 Vehicle ${vehicleId} collected bin (${currentStop}/${totalStops})`);
   }
 
   private onRouteComplete(vehicleId: string, binsCollected: number) {
     console.log(`✅ Vehicle ${vehicleId} completed route: ${binsCollected} bins`);
 
-    const truck = this.activeTrucks.get(vehicleId);
-    if (truck) {
-      const element = truck.marker.getElement();
-      if (element) {
-        element.style.animation = 'pulse 1s';
+    setTimeout(() => {
+      const marker = this.vehicleMarkers.get(vehicleId);
+      if (marker) {
+        const element = marker.getElement();
+        if (element) {
+          element.style.animation = 'pulse 1s';
+        }
+
+        setTimeout(() => {
+          if (this.map.hasLayer(marker)) {
+            this.map.removeLayer(marker);
+          }
+          this.vehicleMarkers.delete(vehicleId);
+          this.activeTrucks.delete(vehicleId);
+        }, 5000);
       }
 
-      setTimeout(() => {
-        if (this.map.hasLayer(truck.marker)) {
-          this.map.removeLayer(truck.marker);
-        }
-        this.activeTrucks.delete(vehicleId);
-      }, 5000);
-    }
-
-    this.showNotification(`✅ Route completed: ${binsCollected} bins collected!`);
+      this.showNotification(`✅ Route completed: ${binsCollected} bins collected!`);
+    }, 3000);
   }
 
   clearAllRoutes() {
+    console.log('🧹 Clearing all routes and markers');
+
+    this.vehicleMarkers.forEach(marker => {
+      this.map.removeLayer(marker);
+    });
+    this.vehicleMarkers.clear();
+
     this.routePolylines.forEach(p => this.map.removeLayer(p));
     this.routePolylines.clear();
+
     this.routeMarkers.forEach(m => this.map.removeLayer(m));
     this.routeMarkers = [];
-    this.activeTrucks.forEach(t => this.map.removeLayer(t.marker));
+
     this.activeTrucks.clear();
   }
 
@@ -516,31 +545,36 @@ export class MapComponent implements OnInit, OnDestroy {
     }
     return color;
   }
-  showDepartmentRoutesWithPolylines(departmentId: string) {
-  console.log(`🗺️ Loading all vehicle routes for department ${departmentId}`);
-  
-  this.routeService.getDepartmentRoutesWithPolylines(departmentId).subscribe({
-    next: (routesData: any[]) => {
-      console.log('✅ Received routes:', routesData);
-      this.drawAllVehicleRoutes(routesData);
-      
-      // ✅ ALSO load available vehicles
-      this.availableVehicles = routesData.map(route => ({
-        vehicleId: route.vehicleId,
-        binCount: route.bins.length
-      }));
-      
-      if (this.availableVehicles.length > 0) {
-        this.selectedVehicleId = this.availableVehicles[0].vehicleId;
-      }
-    },
-    error: (error: any) => {
-      console.error('❌ Failed to load routes:', error);
-      this.showNotification('Failed to load routes');
-    }
-  });
-}
 
+  // ============ ROUTE VISUALIZATION ============
+
+  // ✅ NEW: Load available routes (shows ALL routes)
+  private loadAvailableRoutes(departmentId: string) {
+    console.log(`🗺️ Loading available routes for department ${departmentId}`);
+
+    this.routeService.getAvailableRoutes(departmentId).subscribe({
+      next: (routes: any[]) => {
+        console.log('✅ Received routes:', routes);
+        this.drawAllVehicleRoutes(routes);
+
+        // ✅ Load available vehicles with proper structure
+        this.availableVehicles = routes.map((route: any) => ({
+          id: route.routeId,  // ✅ Use routeId for unassigned routes
+          routeId: route.routeId,
+          binCount: route.binCount || route.bins?.length || 0,
+          reference: `Route ${route.routeId.substring(route.routeId.lastIndexOf('-') + 1)}`
+        }));
+
+        if (this.availableVehicles.length > 0) {
+          this.selectedVehicleId = this.availableVehicles[0].id;
+        }
+      },
+      error: (error: any) => {
+        console.error('❌ Failed to load routes:', error);
+        this.showNotification('Failed to load routes');
+      }
+    });
+  }
 
   private drawAllVehicleRoutes(routesData: any[]) {
     this.clearAllRoutes();
@@ -553,12 +587,12 @@ export class MapComponent implements OnInit, OnDestroy {
     const colors = ['#2563eb', '#ef4444', '#16a34a', '#f97316', '#8b5cf6', '#ec4899'];
 
     routesData.forEach((routeData, index) => {
-      const vehicleId = routeData.vehicleId;
+      const routeId = routeData.routeId;  // ✅ Use routeId instead of vehicleId
       const bins = routeData.bins;
       const polyline = routeData.polyline;
       const color = colors[index % colors.length];
 
-      console.log(`🚛 Drawing route for vehicle ${vehicleId}: ${bins.length} bins`);
+      console.log(`🚛 Drawing route ${routeId}: ${bins.length} bins`);
 
       // Draw polyline
       if (polyline && polyline.length > 0) {
@@ -571,56 +605,22 @@ export class MapComponent implements OnInit, OnDestroy {
           dashArray: '5, 5'
         }).addTo(this.map);
 
-        this.routePolylines.set(vehicleId, line);
+        this.routePolylines.set(routeId, line);
       }
 
       // Add bin markers
       bins.forEach((bin: any, stopIndex: number) => {
         const marker = this.L.marker([bin.latitude, bin.longitude], {
-          title: `Stop ${stopIndex + 1} - Vehicle ${vehicleId}`
+          title: `Stop ${stopIndex + 1} - Route ${routeId}`
         })
-          .bindPopup(`🚛 Vehicle: ${vehicleId}<br>Stop #${stopIndex + 1}<br>Bin: ${bin.id}`)
+          .bindPopup(`📍 Route: ${routeId.substring(routeId.lastIndexOf('-') + 1)}<br>Stop #${stopIndex + 1}<br>Bin: ${bin.id}`)
           .addTo(this.map);
 
         this.routeMarkers.push(marker);
       });
     });
 
-    // Fit map to all routes
-    if (this.routePolylines.size > 0) {
-      const allBounds = Array.from(this.routePolylines.values())
-        .map((p: any) => p.getBounds());
-
-      if (allBounds.length > 0) {
-        const combinedBounds = allBounds[0];
-        allBounds.slice(1).forEach(b => combinedBounds.extend(b));
-        this.map.fitBounds(combinedBounds);
-      }
-    }
-
-    this.showNotification(`📍 Showing ${routesData.length} vehicle routes`);
-  }
-  loadAvailableVehicles(departmentId: string) {
-    console.log('🚛 Loading available vehicles...');
-
-    // We'll get vehicles from the routes endpoint
-    this.routeService.getDepartmentRoutesWithPolylines(departmentId).subscribe({
-      next: (routesData: any[]) => {
-        this.availableVehicles = routesData.map(route => ({
-          vehicleId: route.vehicleId,
-          binCount: route.bins.length
-        }));
-
-        if (this.availableVehicles.length > 0) {
-          this.selectedVehicleId = this.availableVehicles[0].vehicleId;
-        }
-
-        console.log('✅ Loaded vehicles:', this.availableVehicles);
-      },
-      error: (error: any) => {
-        console.error('❌ Failed to load vehicles:', error);
-      }
-    });
+    this.showNotification(`📍 Showing ${routesData.length} routes`);
   }
 
   executeSelectedVehicle() {
@@ -629,33 +629,62 @@ export class MapComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log(`🚀 Executing route for vehicle ${this.selectedVehicleId}`);
+    console.log(`🚀 Executing route ${this.selectedVehicleId}`);
+
+    this.activeTrucks.set(this.selectedVehicleId, {
+      vehicleId: this.selectedVehicleId,
+      progress: 0
+    });
 
     this.routeService.executeManagedRoute('6920266d0b737026e2496c54', this.selectedVehicleId).subscribe({
       next: (data: any) => {
         console.log('✅ Route started:', data);
-        this.showNotification(`Route started for vehicle ${this.selectedVehicleId}`);
+        this.showNotification(`Route started for ${this.selectedVehicleId}`);
       },
       error: (error: any) => {
         console.error('❌ Failed to start route:', error);
+        this.activeTrucks.delete(this.selectedVehicleId);
         this.showNotification('Failed to start route');
       }
     });
   }
 
-  executeAllVehicles() {
-    console.log('🚀🚀 Executing routes for ALL vehicles');
+  executeAllAvailableVehicles() {
+    const availableVehicles = this.getAvailableVehiclesOnly();
 
-    this.routeService.executeAllManagedRoutes('6920266d0b737026e2496c54').subscribe({
-      next: (data: any) => {
-        console.log('✅ All routes started:', data);
-        const count = data.totalVehicles || 0;
-        this.showNotification(`Started routes for ${count} vehicles!`);
-      },
-      error: (error: any) => {
-        console.error('❌ Failed to start routes:', error);
-        this.showNotification('Failed to start routes');
-      }
+    if (availableVehicles.length === 0) {
+      this.showNotification('No available vehicles!');
+      return;
+    }
+
+    console.log(`🚀🚀 Executing routes for ${availableVehicles.length} available vehicles`);
+
+    availableVehicles.forEach(vehicle => {
+      const vId = vehicle.id || vehicle.routeId;
+
+      this.activeTrucks.set(vId, {
+        vehicleId: vId,
+        progress: 0
+      });
+
+      this.routeService.executeManagedRoute('6920266d0b737026e2496c54', vId).subscribe({
+        next: (data: any) => {
+          console.log(`✅ Route started for ${vId}`);
+        },
+        error: (error: any) => {
+          console.error(`❌ Failed to start route for ${vId}:`, error);
+          this.activeTrucks.delete(vId);
+        }
+      });
+    });
+
+    this.showNotification(`Started routes for ${availableVehicles.length} vehicles!`);
+  }
+
+  getAvailableVehiclesOnly(): any[] {
+    return this.availableVehicles.filter((vehicle: any) => {
+      const vId = vehicle.id || vehicle.routeId;
+      return !this.activeTrucks.has(vId);
     });
   }
 }

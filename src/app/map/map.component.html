@@ -1,70 +1,15 @@
 <div class="map-wrapper">
   <div id="map"></div>
 
-  <!-- ✅ Control Panel - Top Left -->
-  <div style="position:absolute; top:10px; left:10px; z-index:1000; display:flex; flex-direction:column; gap:10px;">
-    
-    <!-- Show All Routes Button -->
-    <button
-      class="control-btn primary"
-      (click)="showDepartmentRoutesWithPolylines('6920266d0b737026e2496c54')">
-      📍 Show All Routes
-    </button>
-
-    <!-- Clear Routes Button -->
-    <button
-      class="control-btn danger"
-      (click)="clearAllRoutes()">
-      🧹 Clear Routes
-    </button>
-
-    <!-- ✅ NEW: Vehicle Selector Card -->
-    <div *ngIf="availableVehicles.length > 0" 
-         style="background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); min-width: 250px;">
-      
-      <div style="font-weight: 600; margin-bottom: 10px; color: #374151; font-size: 14px;">
-        🚛 Vehicle Selection
-      </div>
-
-      <!-- Vehicle Dropdown -->
-      <select 
-        [(ngModel)]="selectedVehicleId"
-        class="form-control"
-        style="width: 100%; margin-bottom: 10px; padding: 8px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 13px;">
-        <option *ngFor="let vehicle of availableVehicles" [value]="vehicle.vehicleId">
-          🚛 {{ vehicle.vehicleId.substring(0, 8) }}... ({{ vehicle.binCount }} bins)
-        </option>
-      </select>
-
-      <!-- Execute Selected Vehicle Button -->
-      <button
-        class="control-btn primary"
-        style="width: 100%; margin-bottom: 8px;"
-        (click)="executeSelectedVehicle()">
-        ▶️ Execute Selected
-      </button>
-
-      <!-- Execute All Vehicles Button -->
-      <button
-        class="control-btn primary"
-        style="width: 100%; background: #16a34a;"
-        (click)="executeAllVehicles()">
-        ▶️▶️ Execute All ({{ availableVehicles.length }})
-      </button>
-    </div>
-
-  </div>
-
-  <!-- ✅ Status Panel - Top Right -->
+  <!-- ✅ Status Panel - Top Right (ONLY this remains) -->
   <div class="status-panel" style="position:absolute; top:10px; right:10px; z-index:1000;">
     <div class="status-title">📊 Active Routes</div>
     <div *ngIf="activeTrucks.size === 0" class="no-routes">
       No active routes
     </div>
     <div *ngFor="let truck of getActiveTrucksArray()" class="truck-item">
-      <div class="truck-id">🚛 {{ truck.vehicleId.substring(0, 12) }}...</div>
-      <div class="truck-progress">Progress: {{ truck.progress.toFixed(1) }}%</div>
+      <div class="truck-id">🚛 {{ getVehicleName(truck.vehicleId) }}</div>
+      <div class="truck-progress">Progress: {{ truck.progress?.toFixed(1) || 0 }}%</div>
     </div>
   </div>
-
 </div>

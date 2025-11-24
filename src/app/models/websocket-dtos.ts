@@ -4,6 +4,12 @@ export interface TruckPositionUpdate {
   longitude: number;
   progressPercent: number;
 }
+export interface VehicleStatusUpdate {
+  vehicleId: string;
+  status: string;  // 'AVAILABLE', 'UNLOADING', 'IN_ROUTE', etc.
+  fillLevel?: number;
+  timestamp?: string;
+}
 
 export interface RouteProgressUpdate {
   vehicleId: string;

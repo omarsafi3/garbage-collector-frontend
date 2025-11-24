@@ -53,12 +53,23 @@ export class RouteService {
     return this.http.post<any>(`${this.baseUrl}/execute-managed`, {}, { params });
   }
   getDepartmentRoutesWithPolylines(departmentId: string): Observable<any[]> {
-    const params = new HttpParams().set('departmentId', departmentId);
-    return this.http.get<any[]>(`${this.baseUrl}/department-routes-with-polylines`, { params });
+    return this.http.get<any[]>(`${this.baseUrl}/department/${departmentId}/pre-generated`);
   }
   executeAllManagedRoutes(departmentId: string): Observable<any> {
     const params = new HttpParams().set('departmentId', departmentId);
     return this.http.post<any>(`${this.baseUrl}/execute-all-managed`, {}, { params });
   }
+  getRouteInfo(departmentId: string): Observable<any> {
+    return this.http.get(`${this.baseUrl}/department/${departmentId}/route-info`);
+  }
+  getAvailableRoutes(departmentId: string): Observable<any[]> {
+  return this.http.get<any[]>(`${this.baseUrl}/department/${departmentId}/available-routes`);
+}
+
+assignRouteToVehicle(routeId: string, vehicleId: string, departmentId: string): Observable<any> {
+  return this.http.post(`${this.baseUrl}/assign-route`, null, {
+    params: { routeId, vehicleId, departmentId }
+  });
+}
 
 }

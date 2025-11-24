@@ -24,9 +24,8 @@ export interface VehicleInfo {
   plate: string;
   fillLevel: number;
   available: boolean;
-  location: { lat: number; lng: number };
+  selectedRouteId?: string;  // ✅ ADD THIS LINE
 }
-
 @Injectable({
   providedIn: 'root'
 })
