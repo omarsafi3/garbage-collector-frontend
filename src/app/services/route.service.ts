@@ -26,13 +26,14 @@ export class RouteService {
     const params = new HttpParams().set('departmentId', departmentId);
     return this.http.get<DepartmentRoute[]>(`${this.baseUrl}/optimize/department`, { params });
   }
+  
   getDepartmentRoutesByBinIds(departmentId: string, binIds: string[]): Observable<DepartmentRoute[]> {
     const params = new HttpParams()
       .set('departmentId', departmentId)
       .set('binIds', binIds.join(','));
-    // FIXED: use baseUrl so the request goes to 8080, not 4200
     return this.http.get<DepartmentRoute[]>(`${this.baseUrl}/optimize/department/bins`, { params });
   }
+  
   // NEW: execute full route for one vehicle (no animation yet)
   executeVehicleRoute(vehicleId: string, binIds: string[]): Observable<void> {
     const params = new HttpParams().set('vehicleId', vehicleId);
@@ -46,30 +47,69 @@ export class RouteService {
       .set('binId', binId);
     return this.http.post<void>(`${this.baseUrl}/execute/step`, {}, { params });
   }
+  
   executeManagedRoute(departmentId: string, vehicleId: string): Observable<any> {
     const params = new HttpParams()
       .set('departmentId', departmentId)
       .set('vehicleId', vehicleId);
     return this.http.post<any>(`${this.baseUrl}/execute-managed`, {}, { params });
   }
+  
   getDepartmentRoutesWithPolylines(departmentId: string): Observable<any[]> {
     return this.http.get<any[]>(`${this.baseUrl}/department/${departmentId}/pre-generated`);
   }
+  
   executeAllManagedRoutes(departmentId: string): Observable<any> {
     const params = new HttpParams().set('departmentId', departmentId);
     return this.http.post<any>(`${this.baseUrl}/execute-all-managed`, {}, { params });
   }
+  
   getRouteInfo(departmentId: string): Observable<any> {
     return this.http.get(`${this.baseUrl}/department/${departmentId}/route-info`);
   }
+  
   getAvailableRoutes(departmentId: string): Observable<any[]> {
-  return this.http.get<any[]>(`${this.baseUrl}/department/${departmentId}/available-routes`);
+    return this.http.get<any[]>(`${this.baseUrl}/department/${departmentId}/available-routes`);
+  }
+
+  assignRouteToVehicle(routeId: string, vehicleId: string, departmentId: string): Observable<any> {
+    return this.http.post(`${this.baseUrl}/assign-route`, null, {
+      params: { routeId, vehicleId, departmentId }
+    });
+  }
+
+  // ✅ NEW METHODS BELOW
+
+  /**
+   * Manual route generation trigger
+   */
+  generateRoutes(departmentId: string): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/department/${departmentId}/generate`, null);
+  }
+
+  /**
+   * Manually check critical bins
+   */
+  checkCriticalBins(): Observable<any> {
+    return this.http.post<any>(`${this.baseUrl}/check-critical-bins`, null);
+  }
+
+  /**
+   * Dispatch all available vehicles
+   */
+  dispatchAllVehicles(departmentId: string): Observable<any> {
+    const params = new HttpParams().set('departmentId', departmentId);
+    return this.http.post<any>(`${this.baseUrl}/execute-all-managed`, null, { params });
+  }
+getActiveVehicles(): Observable<any[]> {
+  return this.http.get<any[]>(`${this.baseUrl}/active-vehicles`);
 }
 
-assignRouteToVehicle(routeId: string, vehicleId: string, departmentId: string): Observable<any> {
-  return this.http.post(`${this.baseUrl}/assign-route`, null, {
-    params: { routeId, vehicleId, departmentId }
-  });
+/**
+ * ✅ Get active route for a vehicle
+ */
+getActiveRoute(vehicleId: string): Observable<any> {
+  return this.http.get<any>(`${this.baseUrl}/active-route/${vehicleId}`);
 }
 
 }

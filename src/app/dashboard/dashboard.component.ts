@@ -9,12 +9,15 @@ import { RouteProgressUpdate } from '../models/websocket-dtos';
 import { ChangeDetectorRef } from '@angular/core';
 import { AnalyticsService } from '../services/analytics.service';
 import { RouteService } from '../services/route.service';
-import { FormsModule } from '@angular/forms'; // ✅ CRITICAL: Must import FormsModule
+import { FormsModule } from '@angular/forms';
+import { EmployeeService } from '../services/employee.service'; // ✅ NEW
+import { Employee } from '../models/employee';
+
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, MapComponent, FormsModule], // ✅ CRITICAL: Add FormsModule here
+  imports: [CommonModule, MapComponent, FormsModule],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css'],
   encapsulation: ViewEncapsulation.None
@@ -33,14 +36,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
   employees: any[] = [];
   private activeRoutes: Set<string> = new Set();
   private refreshInterval?: any;
-  
-  // Analytics
+
   analyticsData: any = null;
   recentRoutes: any[] = [];
   loadingAnalytics = false;
 
-  // ✅ NEW: Available routes property
   availableRoutes: any[] = [];
+
+  // ✅ NEW: Employee management
+  availableEmployees: any[] = [];
+  vehicleEmployees: Map<string, string[]> = new Map(); // vehicleId -> [employeeId1, employeeId2]
 
   private routeProgressSub?: Subscription;
   private routeCompletionSub?: Subscription;
@@ -56,6 +61,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private routeService: RouteService,
     private analyticsService: AnalyticsService,
+    private employeeService: EmployeeService, // ✅ NEW
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
 
@@ -63,11 +69,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     console.log('🚀 Dashboard loading...');
     this.loadCurrentDepartment();
     this.setupWebSocketListeners();
-
-    // ✅ Load available routes
     this.loadAvailableRoutes();
+    this.loadAvailableEmployees(); // ✅ NEW
 
-    // Auto-fetch routes on load
     setTimeout(() => {
       console.log('📍 Auto-fetching pre-generated routes...');
       this.showAllRoutes();
@@ -96,7 +100,110 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }, 5000);
   }
 
-  // ✅ NEW: Load available routes
+  // ✅ NEW: Load available employees
+  loadAvailableEmployees() {
+    this.employeeService.getAvailableEmployees().subscribe({
+      next: (employees: any[]) => {
+        this.availableEmployees = employees;
+        console.log('✅ Available employees:', employees.length);
+        this.cdr.detectChanges();
+      },
+      error: (err: any) => {
+        console.error('❌ Failed to load employees:', err);
+      }
+    });
+  }
+
+  // ✅ NEW: Assign employee to vehicle
+  assignEmployee(vehicleId: string, employeeSlot: number) {
+    if (!this.vehicleEmployees.has(vehicleId)) {
+      this.vehicleEmployees.set(vehicleId, ['', '']);
+    }
+    // Employee selection happens via dropdown binding
+  }
+
+  // ✅ NEW: Get assigned employees for vehicle
+  getAssignedEmployees(vehicleId: string): string[] {
+    return this.vehicleEmployees.get(vehicleId) || ['', ''];
+  }
+
+  // ✅ NEW: Get employee name by ID
+  getEmployeeName(employeeId: string): string {
+    const emp = this.availableEmployees.find(e => e.id === employeeId);
+    return emp ? `${emp.firstName} ${emp.lastName}` : 'Select Employee';
+  }
+
+  // ✅ NEW: Check if vehicle can be dispatched (has 2 employees + route)
+  canDispatch(vehicleId: string, selectedRouteId: string | undefined): boolean {
+    const employees = this.getAssignedEmployees(vehicleId);
+    const hasTwoEmployees = !!(employees[0] && employees[1] && employees[0] !== employees[1]); // ✅ Double negation converts to boolean
+    const hasRoute = !!(selectedRouteId && selectedRouteId !== ''); // ✅ Double negation converts to boolean
+    return hasTwoEmployees && hasRoute;
+  }
+  // ✅ ADD THESE PROPERTIES
+  showMapModal: boolean = false;
+
+  // ✅ ADD THESE METHODS
+
+  openMapModal(): void {
+  this.showMapModal = true;
+  // ✅ Trigger the map resize event
+  setTimeout(() => {
+    window.dispatchEvent(new CustomEvent('map-modal-opened'));
+  }, 100);
+}
+
+
+  closeMapModal(): void {
+    this.showMapModal = false;
+  }
+
+  // Get employees currently in active trucks
+  getEmployeesInTrucks(): Employee[] {
+    const inTruckEmployeeIds = new Set<string>();
+
+    this.activeTrucks.forEach(truck => {
+      const employeeIds = this.vehicleEmployees.get(truck.vehicleId) || [];
+      employeeIds.forEach(id => {
+        if (id) inTruckEmployeeIds.add(id);
+      });
+    });
+
+    return this.availableEmployees.filter(emp =>
+      inTruckEmployeeIds.has(emp.id)
+    );
+  }
+
+  // Get truly available employees (not in trucks)
+  getTrulyAvailableEmployees(): Employee[] {
+    const inTruckEmployeeIds = new Set<string>();
+
+    this.activeTrucks.forEach(truck => {
+      const employeeIds = this.vehicleEmployees.get(truck.vehicleId) || [];
+      employeeIds.forEach(id => {
+        if (id) inTruckEmployeeIds.add(id);
+      });
+    });
+
+    return this.availableEmployees.filter(emp =>
+      !inTruckEmployeeIds.has(emp.id)
+    );
+  }
+
+  getVehicleEmployees(vehicleId: string): string[] {
+    if (!this.vehicleEmployees.has(vehicleId)) {
+      this.vehicleEmployees.set(vehicleId, ['', '']);
+    }
+    return this.vehicleEmployees.get(vehicleId)!;
+  }
+
+  setVehicleEmployee(vehicleId: string, slotIndex: number, employeeId: string) {
+    const employees = this.getVehicleEmployees(vehicleId);
+    employees[slotIndex] = employeeId;
+    this.vehicleEmployees.set(vehicleId, employees);
+  }
+
+
   loadAvailableRoutes() {
     this.routeService.getAvailableRoutes(this.CURRENT_DEPARTMENT_ID).subscribe({
       next: (routes: any[]) => {
@@ -110,67 +217,91 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // ✅ Get only available vehicles (not in route)
   getAvailableVehiclesOnly(): VehicleInfo[] {
-    return this.selectedDeptVehicles.filter(v => 
+    return this.selectedDeptVehicles.filter(v =>
       v.available && !this.activeTrucks.has(v.id)
     );
   }
+
   getRouteColorEmoji(index: number): string {
-  const emojis = ['🔵', '🔴', '🟢', '🟠', '🟣', '🌸'];
-  return emojis[index % emojis.length];
-}
-
-  getRouteColor(index: number): string {
-  const colors = ['#2563eb', '#ef4444', '#16a34a', '#f97316', '#8b5cf6', '#ec4899'];
-  return colors[index % colors.length];
-}
-
-  // ✅ NEW: Dispatch vehicle with specific route (CRITICAL - this was missing)
-  dispatchVehicleWithRoute(vehicleId: string, routeId: string | undefined) {
-  if (!routeId) {
-    alert('⚠️ Please select a route first!');
-    return;
+    const emojis = ['🔵', '🔴', '🟢', '🟠', '🟣', '🌸'];
+    return emojis[index % emojis.length];
   }
 
-  console.log(`🚀 Dispatching vehicle ${vehicleId} with route ${routeId}`);
+  getRouteColor(index: number): string {
+    const colors = ['#2563eb', '#ef4444', '#16a34a', '#f97316', '#8b5cf6', '#ec4899'];
+    return colors[index % colors.length];
+  }
 
-  // Assign route to vehicle
-  this.routeService.assignRouteToVehicle(routeId, vehicleId, this.CURRENT_DEPARTMENT_ID).subscribe({
-    next: (result: any) => {
-      console.log(`✅ Route assigned and started:`, result);
-
-      // ✅ CRITICAL FIX: Store with VEHICLE ID, not route ID!
-      this.activeTrucks.set(vehicleId, {  // ✅ Use vehicleId here, not routeId!
-        vehicleId: vehicleId,
-        progress: 0,
-        routeId: routeId
-      });
-
-      // ✅ ALSO: Notify map component to track this vehicle
-      window.dispatchEvent(new CustomEvent('vehicle-started', {
-        detail: { vehicleId: vehicleId }  // ✅ Send vehicle ID, not route ID
-      }));
-
-      // Remove route from available list
-      this.availableRoutes = this.availableRoutes.filter(r => r.routeId !== routeId);
-
-      // Clear vehicle's selected route
-      const vehicle = this.selectedDeptVehicles.find(v => v.id === vehicleId);
-      if (vehicle) {
-        (vehicle as any).selectedRouteId = '';
-      }
-
-      this.cdr.detectChanges();
-    },
-    error: (err: any) => {
-      console.error('❌ Failed to assign route:', err);
-      alert(err.error?.error || 'Failed to assign route to vehicle');
+  // ✅ UPDATED: Dispatch with employee assignment
+  dispatchVehicleWithRoute(vehicleId: string, routeId: string | undefined) {
+    if (!routeId) {
+      alert('⚠️ Please select a route first!');
+      return;
     }
-  });
-}
 
-  // ✅ Dispatch with first available route (for "Dispatch" button without route selector)
+    const employees = this.getAssignedEmployees(vehicleId);
+    if (!employees[0] || !employees[1]) {
+      alert('⚠️ Please assign 2 employees before dispatching!');
+      return;
+    }
+
+    if (employees[0] === employees[1]) {
+      alert('⚠️ Please select 2 different employees!');
+      return;
+    }
+
+    console.log(`🚀 Dispatching vehicle ${vehicleId} with route ${routeId} and employees:`, employees);
+
+    // ✅ First assign employees to vehicle
+    this.employeeService.assignEmployeesToVehicle(vehicleId, employees).subscribe({
+      next: () => {
+        console.log('✅ Employees assigned to vehicle');
+
+        // Then assign route and start
+        this.routeService.assignRouteToVehicle(routeId, vehicleId, this.CURRENT_DEPARTMENT_ID).subscribe({
+          next: (result: any) => {
+            console.log(`✅ Route assigned and started:`, result);
+
+            this.activeTrucks.set(vehicleId, {
+              vehicleId: vehicleId,
+              progress: 0,
+              routeId: routeId
+            });
+
+            window.dispatchEvent(new CustomEvent('vehicle-started', {
+              detail: { vehicleId: vehicleId }
+            }));
+
+            this.availableRoutes = this.availableRoutes.filter(r => r.routeId !== routeId);
+            this.vehicleEmployees.delete(vehicleId); // Clear employee selection
+
+            // Reload available employees
+            this.loadAvailableEmployees();
+
+            const vehicle = this.selectedDeptVehicles.find(v => v.id === vehicleId);
+            if (vehicle) {
+              (vehicle as any).selectedRouteId = '';
+            }
+
+            this.cdr.detectChanges();
+          },
+          error: (err: any) => {
+            console.error('❌ Failed to assign route:', err);
+            alert(err.error?.error || 'Failed to assign route to vehicle');
+          }
+        });
+      },
+      error: (err: any) => {
+        console.error('❌ Failed to assign employees:', err);
+        alert(err.error?.error || 'Failed to assign employees to vehicle');
+      }
+    });
+  }
+
+  // Rest of your existing methods remain the same...
+  // (I'll continue in next message if needed)
+
   dispatchVehicle(vehicleId: string) {
     console.log(`🚀 Dispatching vehicle: ${vehicleId}`);
 
@@ -179,25 +310,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
       return;
     }
 
-    const route = this.availableRoutes[0]; // Take first available route
-
+    const route = this.availableRoutes[0];
     console.log(`📦 Assigning route ${route.routeId} to vehicle ${vehicleId}`);
 
-    // Assign route to vehicle
     this.routeService.assignRouteToVehicle(route.routeId, vehicleId, this.CURRENT_DEPARTMENT_ID).subscribe({
       next: (result: any) => {
         console.log(`✅ Route assigned and started:`, result);
-
-        // Mark vehicle as active
         this.activeTrucks.set(vehicleId, {
           vehicleId: vehicleId,
           progress: 0,
           routeId: route.routeId
         });
-
-        // Remove route from available list
         this.availableRoutes = this.availableRoutes.filter(r => r.routeId !== route.routeId);
-
         this.cdr.detectChanges();
       },
       error: (err: any) => {
@@ -207,7 +331,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // ✅ Dispatch all available vehicles
   dispatchAllAvailable() {
     const availableVehicles = this.getAvailableVehiclesOnly();
 
@@ -223,7 +346,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
     console.log(`🚀🚀 Dispatching ${availableVehicles.length} vehicles`);
 
-    // Dispatch each vehicle with a route
     availableVehicles.forEach((vehicle, index) => {
       if (this.availableRoutes[index]) {
         this.dispatchVehicle(vehicle.id);
@@ -240,16 +362,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.routeProgressSub = this.webSocketService.getRouteProgressUpdates().subscribe(
       (update: RouteProgressUpdate) => {
         console.log('📊 Route progress update:', update);
-
         this.vehicleProgress.set(update.vehicleId, {
           currentStop: update.currentStop,
           totalStops: update.totalStops,
           binId: update.binId,
           fillLevel: update.vehicleFillLevel
         });
-
         this.updateVehicleFillLevel(update.vehicleId, update.vehicleFillLevel);
-
         const progress = (update.currentStop / update.totalStops) * 100;
         this.activeTrucks.set(update.vehicleId, {
           vehicleId: update.vehicleId,
@@ -257,7 +376,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           currentStop: update.currentStop,
           totalStops: update.totalStops
         });
-
         this.cdr.detectChanges();
       }
     );
@@ -266,10 +384,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
       (event: any) => {
         console.log('✅ Route completed:', event);
         this.onRouteCompleted(event.vehicleId, event.binsCollected);
-        
-        // ✅ Reload available routes after completion
         this.loadAvailableRoutes();
-        
+        this.loadAvailableEmployees(); // ✅ Reload employees when route completes
         this.cdr.detectChanges();
       }
     );
@@ -277,28 +393,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.vehicleUpdateSub = this.webSocketService.getVehicleUpdates().subscribe(
       (update: any) => {
         console.log('🚛 Vehicle update:', update);
-
         if (update.status === 'UNLOADING') {
           this.onVehicleUnloading(update.vehicleId);
         }
-
         if (update.status === 'AVAILABLE' && this.unloadingVehicles.has(update.vehicleId)) {
           this.unloadingVehicles.delete(update.vehicleId);
           console.log(`✅ Vehicle ${update.vehicleId} finished unloading!`);
         }
-
         if (update.vehicleId && update.fillLevel !== undefined) {
           this.updateVehicleFillLevel(update.vehicleId, update.fillLevel);
         }
-
         if (update.vehicleId && update.available !== undefined) {
           this.updateVehicleAvailability(update.vehicleId, update.available);
         }
-
         this.cdr.detectChanges();
       }
     );
   }
+
 
   private updateVehicleFillLevel(vehicleId: string, fillLevel: number) {
     const vehicleIndex = this.selectedDeptVehicles.findIndex(v => v.id === vehicleId);
@@ -346,9 +458,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadAnalytics() {
     if (!this.selectedDepartment) return;
-
     this.loadingAnalytics = true;
-
     this.analyticsService.getDepartmentSummary(this.selectedDepartment.departmentId).subscribe({
       next: (data) => {
         this.analyticsData = data;
@@ -360,7 +470,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loadingAnalytics = false;
       }
     });
-
     this.analyticsService.getRecentRoutes(this.selectedDepartment.departmentId, 3).subscribe({
       next: (routes) => {
         this.recentRoutes = routes;
@@ -387,13 +496,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.departmentService.getDepartmentById(this.CURRENT_DEPARTMENT_ID).subscribe({
       next: (dept: any) => {
         console.log('✅ Department loaded:', dept.name);
-
         this.department = dept;
         this.departmentStats = dept;
-
         const deptId = dept.id || dept._id || this.CURRENT_DEPARTMENT_ID;
         console.log('🆔 Using department ID:', deptId);
-
         this.selectedDepartment = {
           departmentId: deptId,
           departmentName: dept.name,
@@ -408,7 +514,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
           averageFillLevel: 0,
           co2Saved: 0
         };
-
         this.loading = false;
         this.loadDepartmentVehicles();
         this.loadDepartmentEmployees();
@@ -466,14 +571,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.activeRoutes.delete(vehicleId);
     this.vehicleProgress.delete(vehicleId);
     this.activeTrucks.delete(vehicleId);
-
     console.log(`✅ Route completed! ${this.activeRoutes.size} routes remaining`);
-
     const vehicle = this.selectedDeptVehicles.find(v => v.id === vehicleId);
     const vehicleName = vehicle?.reference || 'Vehicle';
-
     alert(`✅ ${vehicleName} completed route!\nCollected ${binsCollected} bins`);
-
     this.loadDepartmentVehicles();
   }
 
@@ -515,17 +616,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
       alert('❌ Routes are already executing! Clear them first.');
       return;
     }
-
     this.loadingRoutes = true;
     console.log('🗺️ Loading routes...');
-
     this.dashboardService.getDepartmentRoutes(this.CURRENT_DEPARTMENT_ID)
       .subscribe({
         next: (routes) => {
           this.departmentRoutes = routes;
           console.log('✅ Routes loaded:', routes);
           this.loadingRoutes = false;
-
           window.dispatchEvent(new CustomEvent('show-department-routes', {
             detail: { departmentId: this.CURRENT_DEPARTMENT_ID }
           }));
@@ -584,4 +682,85 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     return available ? '✓ Ready' : '⏸️ Busy';
   }
+  // ✅ NEW METHOD 1: Manual route generation
+  manualGenerateRoutes(): void {
+    if (!this.selectedDepartment) {
+      console.warn('⚠️ No department selected');
+      return;
+    }
+
+    console.log('🔄 Manually generating routes...');
+
+    this.routeService.generateRoutes(this.CURRENT_DEPARTMENT_ID).subscribe({
+      next: (response) => {
+        console.log('✅ Routes generated:', response);
+        alert(`✅ Generated ${response.routeCount} new routes!`);
+
+        // Refresh available routes
+        this.loadAvailableRoutes();
+      },
+      error: (err) => {
+        console.error('❌ Route generation failed:', err);
+        alert('Failed to generate routes: ' + (err.error?.error || err.message));
+      }
+    });
+  }
+
+  // ✅ NEW METHOD 2: Check critical bins manually
+  checkCriticalBins(): void {
+    console.log('🔍 Checking critical bins...');
+
+    this.routeService.checkCriticalBins().subscribe({
+      next: (response) => {
+        console.log('✅ Critical bins checked:', response);
+        alert('✅ Critical bins check complete!');
+
+        // Refresh available routes
+        this.loadAvailableRoutes();
+      },
+      error: (err) => {
+        console.error('❌ Critical bin check failed:', err);
+        alert('Failed to check critical bins: ' + (err.error?.error || err.message));
+      }
+    });
+  }
+
+  // ✅ NEW METHOD 3: Updated dispatch all with better error handling
+  dispatchAllAvailableWithEmployees(): void {
+    const availableVehicles = this.getAvailableVehiclesOnly();
+
+    if (availableVehicles.length === 0) {
+      alert('❌ No available vehicles to dispatch!');
+      return;
+    }
+
+    if (this.availableRoutes.length < availableVehicles.length) {
+      alert(`⚠️ Not enough routes! You have ${availableVehicles.length} vehicles but only ${this.availableRoutes.length} routes available.`);
+      return;
+    }
+
+    // Check if all vehicles have 2 employees assigned
+    const vehiclesWithoutEmployees = availableVehicles.filter(vehicle => {
+      const employees = this.getAssignedEmployees(vehicle.id);
+      return !employees[0] || !employees[1] || employees[0] === employees[1];
+    });
+
+    if (vehiclesWithoutEmployees.length > 0) {
+      alert(`⚠️ ${vehiclesWithoutEmployees.length} vehicle(s) don't have 2 employees assigned. Please assign employees to all vehicles first.`);
+      return;
+    }
+
+    console.log(`🚀🚀 Dispatching ${availableVehicles.length} vehicles with employees`);
+
+    // Dispatch each vehicle with its assigned employees
+    availableVehicles.forEach((vehicle, index) => {
+      if (this.availableRoutes[index]) {
+        const route = this.availableRoutes[index];
+        setTimeout(() => {
+          this.dispatchVehicleWithRoute(vehicle.id, route.routeId);
+        }, index * 500); // Stagger dispatches by 500ms
+      }
+    });
+  }
+
 }

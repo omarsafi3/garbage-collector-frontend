@@ -246,39 +246,44 @@
   transform: none !important;
 }
 
+.action-btn.map {
+  padding: 11px 22px;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  letter-spacing: 0.6px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 6px 24px rgba(59, 130, 246, 0.4);
+}
+
+.action-btn.map:hover {
+  box-shadow: 0 8px 36px rgba(59, 130, 246, 0.6);
+  transform: translateY(-3px);
+}
+
 /* ========================================
-   MAIN CONTENT LAYOUT - FIXED
+   NEW 3-COLUMN LAYOUT - FIXED
    ======================================== */
 
 .main-content {
-  display: flex;
-  flex: 1;
-  gap: 20px;
-  padding: 20px;
-  overflow: hidden;
-  min-height: 0;
-  position: relative;
-  z-index: 1;
+  display: grid !important;
+  grid-template-columns: 1fr 1.5fr 1fr !important;
+  gap: 20px !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  padding: 20px !important;
+  position: relative !important;
+  z-index: 1 !important;
 }
 
-/* ========================================
-   LEFT COLUMN - TWO COLUMNS LAYOUT - FIXED
-   ======================================== */
-
-.left-column {
-  flex: 0 0 50%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  min-height: 0;
-  height: 100%;
-}
-
-/* ========================================
-   ACTIVE ROUTES SECTION (LEFT CARD) - FIXED
-   ======================================== */
-
-.active-routes-section {
+.active-routes-section,
+.vehicles-section,
+.employee-pool-section {
   background: rgba(26, 26, 46, 0.7);
   backdrop-filter: blur(20px);
   border-radius: 20px;
@@ -291,7 +296,12 @@
   flex-direction: column;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
+
+/* ========================================
+   SECTION HEADERS
+   ======================================== */
 
 .section-header {
   display: flex;
@@ -347,6 +357,10 @@
   box-shadow: 0 4px 18px rgba(37, 99, 235, 0.5);
   border: 1px solid rgba(96, 165, 250, 0.4);
 }
+
+/* ========================================
+   ACTIVE ROUTES GRID
+   ======================================== */
 
 .active-routes-grid {
   display: flex;
@@ -499,23 +513,43 @@
 }
 
 /* ========================================
-   VEHICLES SECTION (RIGHT CARD) - FIXED
+   TRUCK CREW DISPLAY IN ACTIVE ROUTES
    ======================================== */
 
-.vehicles-section {
-  background: rgba(26, 26, 46, 0.7);
-  backdrop-filter: blur(20px);
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 
-    0 12px 40px rgba(0, 0, 0, 0.4),
-    0 0 100px rgba(212, 175, 55, 0.08) inset;
-  border: 1px solid rgba(212, 175, 55, 0.25);
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
+.truck-crew {
+  padding: 10px 14px;
+  background: rgba(16, 185, 129, 0.15);
+  border-left: 4px solid #10b981;
+  border-radius: 8px;
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.15);
 }
+
+.crew-label {
+  font-size: 12px;
+  font-weight: 800;
+  color: #6ee7b7;
+  margin-bottom: 8px;
+}
+
+.crew-members {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.crew-badge {
+  padding: 4px 10px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+}
+
+/* ========================================
+   VEHICLES SECTION
+   ======================================== */
 
 .vehicles-horizontal-grid {
   display: flex;
@@ -550,7 +584,7 @@
 }
 
 /* ========================================
-   VEHICLE CARD - LUXURY - NO HEIGHT RESTRICTIONS
+   VEHICLE CARD - LUXURY
    ======================================== */
 
 .vehicle-card-horizontal {
@@ -766,7 +800,7 @@
 }
 
 /* ========================================
-   CARD ACTIONS - MORE SPACING
+   CARD ACTIONS
    ======================================== */
 
 .card-actions {
@@ -777,7 +811,76 @@
 }
 
 /* ========================================
-   ROUTE SELECTOR DROPDOWN - LUXURY
+   EMPLOYEE ASSIGNMENT BOX
+   ======================================== */
+
+.employee-assignment-box {
+  background: rgba(147, 197, 253, 0.1);
+  padding: 14px;
+  border-radius: 10px;
+  border-left: 4px solid #3b82f6;
+  margin-bottom: 12px;
+}
+
+.assignment-header {
+  font-size: 13px;
+  font-weight: 800;
+  color: #3b82f6;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.employee-selector {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  border: 2px solid #3b82f6;
+  border-radius: 8px;
+  font-size: 13px;
+  background: white;
+  color: #1f2937;
+  font-family: inherit;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.employee-selector:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.employee-selector option {
+  padding: 10px;
+}
+
+.assigned-badges {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.employee-badge {
+  background: linear-gradient(135deg, #10b981, #059669);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.3);
+}
+
+.warning {
+  color: #f97316;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+/* ========================================
+   ROUTE SELECTOR
    ======================================== */
 
 .route-selector {
@@ -881,85 +984,274 @@
   box-shadow: none !important;
 }
 
+.validation-error {
+  background: rgba(239, 68, 68, 0.15);
+  border-left: 4px solid #ef4444;
+  padding: 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #fca5a5;
+  font-weight: 700;
+  margin-top: 8px;
+}
+
+.in-route-badge {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  color: white;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+}
+
+.busy-badge {
+  background: linear-gradient(135deg, #9ca3af, #6b7280);
+  color: white;
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+}
+
 /* ========================================
-   MAP SECTION - LUXURY FRAME WITH PROPER Z-INDEX
+   EMPLOYEE POOL SECTION
    ======================================== */
 
-.map-section {
-  flex: 0 0 49%;
+.employee-pool-count {
+  padding: 7px 16px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 800;
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.5);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.employee-list {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 10px;
   display: flex;
   flex-direction: column;
-  background: rgba(26, 26, 46, 0.7);
+  gap: 24px;
+}
+
+.employee-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.employee-list::-webkit-scrollbar-track {
+  background: rgba(16, 185, 129, 0.08);
+  border-radius: 10px;
+}
+
+.employee-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  border-radius: 10px;
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
+}
+
+.employee-status-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: rgba(212, 175, 55, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+.employee-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  border: 1px solid;
+}
+
+.employee-card.available {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.employee-card.available:hover {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.5);
+  transform: translateX(5px);
+  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.3);
+}
+
+.employee-card.in-truck {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.employee-card.in-truck:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.5);
+  transform: translateX(5px);
+  box-shadow: 0 4px 18px rgba(59, 130, 246, 0.3);
+}
+
+.employee-avatar {
+  font-size: 32px;
+  line-height: 1;
+  filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.3));
+}
+
+.employee-info {
+  flex: 1;
+}
+
+.employee-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: #f4e5c3;
+  letter-spacing: 0.3px;
+}
+
+.employee-status-text {
+  font-size: 12px;
+  color: rgba(212, 175, 55, 0.7);
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.empty-state {
+  padding: 20px;
+  text-align: center;
+  color: rgba(212, 175, 55, 0.5);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* ========================================
+   MAP MODAL
+   ======================================== */
+
+.map-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.map-modal-container {
+  width: 90vw;
+  height: 85vh;
+  background: rgba(26, 26, 46, 0.95);
   backdrop-filter: blur(20px);
   border-radius: 20px;
-  padding: 24px;
-  box-shadow: 
-    0 12px 40px rgba(0, 0, 0, 0.4),
-    0 0 100px rgba(212, 175, 55, 0.08) inset;
-  border: 1px solid rgba(212, 175, 55, 0.25);
-  overflow: hidden;
-  position: relative;
-  z-index: 1;
-}
-
-.route-actions {
-  display: flex;
-  gap: 10px;
-}
-
-.route-btn {
-  padding: 8px 16px;
   border: 1px solid rgba(212, 175, 55, 0.3);
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  letter-spacing: 0.4px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slideUp 0.3s ease;
 }
 
-.route-btn.show {
-  background: rgba(37, 99, 235, 0.2);
-  color: #93c5fd;
-  border-color: rgba(147, 197, 253, 0.4);
+@keyframes slideUp {
+  from { 
+    opacity: 0;
+    transform: translateY(50px);
+  }
+  to { 
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-.route-btn.show:hover {
-  background: rgba(37, 99, 235, 0.3);
-  box-shadow: 0 6px 18px rgba(37, 99, 235, 0.4);
-  transform: translateY(-2px);
+.map-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.2);
 }
 
-.route-btn.clear {
+.map-modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+  background: linear-gradient(135deg, #d4af37 0%, #f4e5c3 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.modal-close-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
   background: rgba(220, 38, 38, 0.2);
   color: #fca5a5;
-  border-color: rgba(252, 165, 165, 0.4);
+  font-size: 24px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.route-btn.clear:hover {
+.modal-close-btn:hover {
   background: rgba(220, 38, 38, 0.3);
-  box-shadow: 0 6px 18px rgba(220, 38, 38, 0.4);
-  transform: translateY(-2px);
+  transform: rotate(90deg);
+  box-shadow: 0 4px 18px rgba(220, 38, 38, 0.5);
 }
 
-.map-container-small {
+
+.map-modal-body {
   flex: 1;
-  border-radius: 18px;
+  padding: 20px;
   overflow: hidden;
-  border: 1px solid rgba(212, 175, 55, 0.4);
-  box-shadow: 0 0 40px rgba(212, 175, 55, 0.2);
-  position: relative;
-  z-index: 1;
+  /* ✅ ADD THESE */
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
-.map-container-small app-map {
-  display: block;
+
+.map-modal-body app-map {
   width: 100%;
   height: 100%;
-  position: relative;
-  z-index: 1;
+  /* ✅ ADD THESE */
+  min-height: 600px;
+  flex: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  box-shadow: 0 0 40px rgba(212, 175, 55, 0.15);
+  /* ✅ CRITICAL: Force the container to have a size */
+  display: block !important;
 }
-
 /* ========================================
    ANALYTICS SECTION - LUXURY PREMIUM
    ======================================== */
@@ -1185,12 +1477,6 @@
   transform: translateX(6px);
 }
 
-.route-vehicle {
-  font-weight: 800;
-  color: #f4e5c3;
-  letter-spacing: 0.4px;
-}
-
 .route-bins, .route-distance {
   color: rgba(212, 175, 55, 0.8);
   font-weight: 700;
@@ -1205,7 +1491,30 @@
     grid-template-columns: 1fr;
   }
   
-  .left-column {
-    grid-template-columns: 1fr;
+  .main-content {
+    grid-template-columns: 1fr !important;
   }
+}
+.map-modal-overlay.hidden {
+  display: none !important;
+  pointer-events: none !important;
+}
+.action-btn.warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  box-shadow: 0 6px 24px rgba(245, 158, 11, 0.4);
+  color: white;
+}
+.action-btn.warning:hover {
+  box-shadow: 0 8px 36px rgba(245, 158, 11, 0.6);
+}
+
+.action-btn.danger {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  box-shadow: 0 6px 24px rgba(220, 38, 38, 0.4);
+  color: white;
+}
+.action-btn.danger:hover {
+  box-shadow: 0 8px 36px rgba(220, 38, 38, 0.6);
 }

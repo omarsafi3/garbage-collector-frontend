@@ -16,6 +16,7 @@ export class DepartmentService {
   getAllDepartments(): Observable<Department[]> {
     return this.http.get<Department[]>(this.apiUrl);
   }
+  
 
   getDepartmentById(id: string): Observable<Department> {
     return this.http.get<Department>(`${this.apiUrl}/${id}`);
@@ -32,6 +33,7 @@ export class DepartmentService {
   addDepartment(department: Partial<Department>): Observable<Department> {
     return this.http.post<Department>(this.apiUrl, department);
   }
+  
 
   updateDepartment(id: string, department: Partial<Department>): Observable<Department> {
     return this.http.put<Department>(`${this.apiUrl}/${id}`, department);

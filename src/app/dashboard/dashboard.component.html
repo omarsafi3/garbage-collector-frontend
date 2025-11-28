@@ -29,156 +29,215 @@
         </div>
     </div>
 
-    <!-- Main Split -->
+    <!-- Main Content - 3 Column Layout -->
     <div class="main-content">
 
-        <!-- LEFT: Vehicles + Active Routes -->
-        <div class="left-column">
-
-            <!-- ✅ Active Routes Section -->
-            <div class="active-routes-section" *ngIf="activeTrucks.size > 0">
-                <div class="section-header">
-                    <div class="section-title-group">
-                        <h2>🚦 Active Routes</h2>
-                        <span class="route-count">{{ activeTrucks.size }} running</span>
-                    </div>
-                </div>
-
-                <div class="active-routes-grid">
-                    <div class="active-route-card" *ngFor="let truck of getActiveTrucksArray(); let i = index">
-                        <div class="route-card-header">
-                            <!-- ✅ Add colored dot matching route -->
-                            <span class="route-vehicle">
-                                <span [style.color]="getRouteColor(i)" style="font-size: 20px;">●</span>
-                                🚛 {{ getVehicleName(truck.vehicleId) }}
-                            </span>
-                            <span class="route-progress-badge">{{ truck.progress?.toFixed(0) || 0 }}%</span>
-                        </div>
-                        <div class="route-progress-bar">
-                            <div class="route-progress-fill" [style.width.%]="truck.progress || 0"
-                                [style.background]="getProgressGradient(truck.progress || 0)">
-                            </div>
-                        </div>
-                        <div class="route-details" *ngIf="getVehicleProgress(truck.vehicleId)">
-                            <span class="route-detail-text">{{ getVehicleProgress(truck.vehicleId) }}</span>
-                        </div>
-                    </div>
+        <!-- LEFT: Active Routes -->
+        <div class="active-routes-section" *ngIf="activeTrucks.size > 0">
+            <div class="section-header">
+                <div class="section-title-group">
+                    <h2>🚦 Active Routes</h2>
+                    <span class="route-count">{{ activeTrucks.size }} running</span>
                 </div>
             </div>
 
-            <!-- Vehicles Section -->
-            <div class="vehicles-section">
-                <div class="section-header">
-                    <h2>🚗 Active Vehicles</h2>
-                    <div class="header-actions">
-                        <span class="vehicle-count">{{ selectedDeptVehicles.length }} trucks</span>
+            <div class="active-routes-grid">
+                <div class="active-route-card" *ngFor="let truck of getActiveTrucksArray(); let i = index">
+                    <div class="route-card-header">
+                        <span class="route-vehicle">
+                            <span [style.color]="getRouteColor(i)" style="font-size: 20px;">●</span>
+                            🚛 {{ getVehicleName(truck.vehicleId) }}
+                        </span>
+                        <span class="route-progress-badge">{{ truck.progress?.toFixed(0) || 0 }}%</span>
+                    </div>
+                    <div class="route-progress-bar">
+                        <div class="route-progress-fill" [style.width.%]="truck.progress || 0"
+                            [style.background]="getProgressGradient(truck.progress || 0)">
+                        </div>
+                    </div>
 
-                        <!-- ✅ Dispatch All button -->
-                        <button class="action-btn success" (click)="dispatchAllAvailable()"
-                            [disabled]="getAvailableVehiclesOnly().length === 0">
-                            🚀 Dispatch All Available ({{ getAvailableVehiclesOnly().length }})
-                        </button>
+                    <!-- ✅ Show assigned employees in active truck -->
+                    <div class="truck-crew" *ngIf="getAssignedEmployees(truck.vehicleId)[0]">
+                        <div class="crew-label">👷 Crew:</div>
+                        <div class="crew-members">
+                            <span class="crew-badge">{{ getEmployeeName(getAssignedEmployees(truck.vehicleId)[0]) }}</span>
+                            <span class="crew-badge">{{ getEmployeeName(getAssignedEmployees(truck.vehicleId)[1]) }}</span>
+                        </div>
+                    </div>
+
+                    <div class="route-details" *ngIf="getVehicleProgress(truck.vehicleId)">
+                        <span class="route-detail-text">{{ getVehicleProgress(truck.vehicleId) }}</span>
                     </div>
                 </div>
+            </div>
+        </div>
 
-                <div class="vehicles-horizontal-grid">
-                    <div class="vehicle-card-horizontal" *ngFor="let vehicle of selectedDeptVehicles"
-                        [class.vehicle-active]="activeTrucks.has(vehicle.id)">
+        <!-- MIDDLE: Vehicles Section -->
+        <div class="vehicles-section">
+            <div class="section-header">
+                <h2>🚗 Active Vehicles</h2>
+                <div class="header-actions">
+                    <span class="vehicle-count">{{ selectedDeptVehicles.length }} trucks</span>
+                    
+                    <!-- ✅ Dispatch All Button (improved with employee check) -->
+                    <button class="action-btn success" (click)="dispatchAllAvailableWithEmployees()"
+                        [disabled]="getAvailableVehiclesOnly().length === 0">
+                        🚀 Dispatch All ({{ getAvailableVehiclesOnly().length }})
+                    </button>
 
-                        <div class="vehicle-card-top">
-                            <div class="vehicle-icon-large">🚛</div>
-                            <div class="vehicle-info-compact">
-                                <h3>{{ vehicle.reference }}</h3>
-                                <div class="plate-badge">{{ vehicle.plate }}</div>
-                            </div>
-                            <span class="status-dot" [ngClass]="getVehicleStatusClass(vehicle.id, vehicle.available)">
-                                {{ getVehicleStatusText(vehicle.id, vehicle.available) }}
-                            </span>
+                    <!-- ✅ NEW: Manual Route Generation -->
+                    <button class="action-btn warning" (click)="manualGenerateRoutes()">
+                        🔄 Generate Routes
+                    </button>
+
+                    <!-- ✅ NEW: Check Critical Bins -->
+                    <button class="action-btn danger" (click)="checkCriticalBins()">
+                        🚨 Check Critical
+                    </button>
+                    
+                    <!-- ✅ Map Button -->
+                    <button class="action-btn map" (click)="openMapModal()">
+                        🗺️ View Map
+                    </button>
+                </div>
+            </div>
+
+            <div class="vehicles-horizontal-grid">
+                <div class="vehicle-card-horizontal" *ngFor="let vehicle of selectedDeptVehicles"
+                    [class.vehicle-active]="activeTrucks.has(vehicle.id)">
+
+                    <div class="vehicle-card-top">
+                        <div class="vehicle-icon-large">🚛</div>
+                        <div class="vehicle-info-compact">
+                            <h3>{{ vehicle.reference }}</h3>
+                            <div class="plate-badge">{{ vehicle.plate }}</div>
                         </div>
+                        <span class="status-dot" [ngClass]="getVehicleStatusClass(vehicle.id, vehicle.available)">
+                            {{ getVehicleStatusText(vehicle.id, vehicle.available) }}
+                        </span>
+                    </div>
 
-                        <div class="fill-section">
-                            <div class="fill-header">
-                                <span>Truck Fill</span>
-                                <strong>{{ vehicle.fillLevel | number:'1.0-0' }}%</strong>
-                            </div>
-                            <div class="fill-bar-container">
-                                <div class="fill-bar-track"></div>
-                                <div class="fill-bar-progress" [style.width.%]="vehicle.fillLevel"
-                                    [style.background]="getFillGradient(vehicle.fillLevel)">
-                                </div>
+                    <div class="fill-section">
+                        <div class="fill-header">
+                            <span>Truck Fill</span>
+                            <strong>{{ vehicle.fillLevel | number:'1.0-0' }}%</strong>
+                        </div>
+                        <div class="fill-bar-container">
+                            <div class="fill-bar-track"></div>
+                            <div class="fill-bar-progress" [style.width.%]="vehicle.fillLevel"
+                                [style.background]="getFillGradient(vehicle.fillLevel)">
                             </div>
                         </div>
+                    </div>
 
-                        <div class="progress-info"
-                            *ngIf="getVehicleProgress(vehicle.id) || unloadingVehicles.has(vehicle.id)">
-                            <span class="progress-text" *ngIf="!unloadingVehicles.has(vehicle.id)">
-                                {{ getVehicleProgress(vehicle.id) }}
-                            </span>
-                            <span class="progress-text unloading" *ngIf="unloadingVehicles.has(vehicle.id)">
-                                🏭 Unloading at depot... {{ vehicle.fillLevel | number:'1.0-0' }}%
-                            </span>
-                        </div>
+                    <div class="progress-info"
+                        *ngIf="getVehicleProgress(vehicle.id) || unloadingVehicles.has(vehicle.id)">
+                        <span class="progress-text" *ngIf="!unloadingVehicles.has(vehicle.id)">
+                            {{ getVehicleProgress(vehicle.id) }}
+                        </span>
+                        <span class="progress-text unloading" *ngIf="unloadingVehicles.has(vehicle.id)">
+                            🏭 Unloading... {{ vehicle.fillLevel | number:'1.0-0' }}%
+                        </span>
+                    </div>
 
-                        <!-- ✅ Route selection + Dispatch -->
-                        <div class="card-actions" *ngIf="!activeTrucks.has(vehicle.id) && vehicle.available">
-                            <!-- Route selector dropdown with color-coded options -->
-                            <!-- Route selector dropdown with color-coded options -->
-                            <select [(ngModel)]="vehicle.selectedRouteId" class="route-selector"
-                                [disabled]="availableRoutes.length === 0"
-                                style="width: 100%; padding: 10px; margin-bottom: 8px; border: 2px solid #d1d5db; border-radius: 8px; font-size: 13px; font-family: inherit; cursor: pointer; background: white; transition: border-color 0.2s;">
-                                <option value="">📍 Select a route...</option>
-                                <option *ngFor="let route of availableRoutes; let i = index" [value]="route.routeId">
-                                    {{ getRouteColorEmoji(i) }} Route {{ i + 1 }} ({{ route.binCount }} bins)
+                    <div class="card-actions" *ngIf="!activeTrucks.has(vehicle.id) && vehicle.available">
+                        <!-- Employee Assignment -->
+                        <div class="employee-assignment-box">
+                            <div class="assignment-header">👷 Assign 2 Employees</div>
+
+                            <select [value]="getVehicleEmployees(vehicle.id)[0]"
+                                (change)="setVehicleEmployee(vehicle.id, 0, $any($event.target).value)"
+                                class="employee-selector">
+                                <option value="">👤 Select Employee 1...</option>
+                                <option *ngFor="let emp of availableEmployees" [value]="emp.id">
+                                    {{ emp.firstName }} {{ emp.lastName }}
                                 </option>
                             </select>
 
+                            <select [value]="getVehicleEmployees(vehicle.id)[1]"
+                                (change)="setVehicleEmployee(vehicle.id, 1, $any($event.target).value)"
+                                class="employee-selector">
+                                <option value="">👤 Select Employee 2...</option>
+                                <option *ngFor="let emp of availableEmployees" [value]="emp.id">
+                                    {{ emp.firstName }} {{ emp.lastName }}
+                                </option>
+                            </select>
 
-                            <!-- Dispatch button -->
-                            <button class="btn-dispatch"
-                                (click)="dispatchVehicleWithRoute(vehicle.id, vehicle.selectedRouteId || '')"
-                                [disabled]="!vehicle['selectedRouteId']" [class.disabled]="!vehicle['selectedRouteId']"
-                                style="width: 100%; padding: 12px; border: none; border-radius: 8px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; font-weight: 600; cursor: pointer; transition: all 0.2s; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
-                                🚀 Dispatch Vehicle
-                            </button>
-                        </div>
+                            <div class="assigned-badges"
+                                *ngIf="getAssignedEmployees(vehicle.id)[0] && getAssignedEmployees(vehicle.id)[1]">
+                                <span class="employee-badge">✅ {{ getEmployeeName(getAssignedEmployees(vehicle.id)[0]) }}</span>
+                                <span class="employee-badge">✅ {{ getEmployeeName(getAssignedEmployees(vehicle.id)[1]) }}</span>
+                            </div>
 
-                        <!-- Show status when in route -->
-                        <div class="card-actions" *ngIf="activeTrucks.has(vehicle.id)">
-                            <div class="in-route-badge"
-                                style="background: linear-gradient(135deg, #3b82f6, #2563eb); color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px; box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);">
-                                🔄 In Route
+                            <div class="warning"
+                                *ngIf="!getAssignedEmployees(vehicle.id)[0] || !getAssignedEmployees(vehicle.id)[1]">
+                                ⚠️ Both employees required
                             </div>
                         </div>
 
-                        <!-- Show unavailable status -->
-                        <div class="card-actions" *ngIf="!vehicle.available && !activeTrucks.has(vehicle.id)">
-                            <div class="in-route-badge"
-                                style="background: linear-gradient(135deg, #9ca3af, #6b7280); color: white; padding: 12px; border-radius: 8px; text-align: center; font-weight: 600; font-size: 14px;">
-                                ⏸️ Busy
-                            </div>
+                        <!-- Route selector -->
+                        <select [(ngModel)]="vehicle['selectedRouteId']" class="route-selector"
+                            [disabled]="availableRoutes.length === 0">
+                            <option value="">📍 Select a route...</option>
+                            <option *ngFor="let route of availableRoutes; let i = index" [value]="route.routeId">
+                                {{ getRouteColorEmoji(i) }} Route {{ i + 1 }} ({{ route.binCount }} bins)
+                            </option>
+                        </select>
+
+                        <button class="btn-dispatch"
+                            (click)="dispatchVehicleWithRoute(vehicle.id, vehicle['selectedRouteId'] || '')"
+                            [disabled]="!canDispatch(vehicle.id, vehicle['selectedRouteId'])">
+                            🚀 Dispatch Vehicle
+                        </button>
+
+                        <div class="validation-error" *ngIf="!canDispatch(vehicle.id, vehicle['selectedRouteId'])">
+                            ⚠️ Please assign 2 employees and select a route
                         </div>
+                    </div>
+
+                    <div class="card-actions" *ngIf="activeTrucks.has(vehicle.id)">
+                        <div class="in-route-badge">🔄 In Route</div>
+                    </div>
+
+                    <div class="card-actions" *ngIf="!vehicle.available && !activeTrucks.has(vehicle.id)">
+                        <div class="busy-badge">⏸️ Busy</div>
                     </div>
                 </div>
             </div>
-
         </div>
 
-        <!-- RIGHT: Map -->
-        <div class="map-section">
+        <!-- RIGHT: Employee Pool -->
+        <div class="employee-pool-section">
             <div class="section-header">
-                <h2>🗺️ Live Map</h2>
-                <!-- ✅ Route control buttons next to map title -->
-                <div class="route-actions">
-                    <button class="route-btn show" (click)="showAllRoutes()">
-                        🗺️ Show All Routes
-                    </button>
-                    <button class="route-btn clear" (click)="clearAllRoutes()">
-                        🧹 Clear Routes
-                    </button>
-                </div>
+                <h2>👷 Employee Pool</h2>
+                <span class="employee-pool-count">{{ getTrulyAvailableEmployees().length }} available</span>
             </div>
-            <div class="map-container-small">
-                <app-map></app-map>
+
+            <div class="employee-list">
+                <div class="employee-status-group">
+                    <h3 class="group-title">✅ Available</h3>
+                    <div class="employee-card available" *ngFor="let emp of getTrulyAvailableEmployees()">
+                        <div class="employee-avatar">👤</div>
+                        <div class="employee-info">
+                            <div class="employee-name">{{ emp.firstName }} {{ emp.lastName }}</div>
+                            <div class="employee-status-text">Ready for dispatch</div>
+                        </div>
+                    </div>
+                    <div class="empty-state" *ngIf="getTrulyAvailableEmployees().length === 0">
+                        All employees are currently assigned
+                    </div>
+                </div>
+
+                <div class="employee-status-group" *ngIf="getEmployeesInTrucks().length > 0">
+                    <h3 class="group-title">🚛 In Active Trucks</h3>
+                    <div class="employee-card in-truck" *ngFor="let emp of getEmployeesInTrucks()">
+                        <div class="employee-avatar">🚛</div>
+                        <div class="employee-info">
+                            <div class="employee-name">{{ emp.firstName }} {{ emp.lastName }}</div>
+                            <div class="employee-status-text">On route</div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -189,19 +248,16 @@
         <h3 class="section-title">📊 Analytics Overview (Last 30 Days)</h3>
 
         <div class="analytics-grid">
-            <!-- CO2 Card -->
             <div class="analytics-card co2-card">
                 <div class="card-icon">🌍</div>
                 <div class="card-content">
                     <h4>CO2 Emissions</h4>
                     <div class="metric-value">{{ analyticsData.totalCO2EmissionsKg | number:'1.0-0' }} kg</div>
-                    <div class="metric-detail">🌳 {{ analyticsData.treesNeededToOffset | number:'1.0-0' }} trees to
-                        offset</div>
+                    <div class="metric-detail">🌳 {{ analyticsData.treesNeededToOffset | number:'1.0-0' }} trees</div>
                     <div class="metric-small">Avg: {{ analyticsData.avgCO2PerRoute | number:'1.0-0' }} kg/route</div>
                 </div>
             </div>
 
-            <!-- Cost Card -->
             <div class="analytics-card cost-card">
                 <div class="card-icon">💰</div>
                 <div class="card-content">
@@ -212,18 +268,16 @@
                 </div>
             </div>
 
-            <!-- Efficiency Card -->
             <div class="analytics-card efficiency-card">
                 <div class="card-icon">⚡</div>
                 <div class="card-content">
                     <h4>Efficiency</h4>
                     <div class="metric-value">{{ analyticsData.totalBinsCollected }} bins</div>
                     <div class="metric-detail">📍 {{ analyticsData.totalDistanceKm | number:'1.0-2' }} km</div>
-                    <div class="metric-small">{{ analyticsData.totalRoutes }} routes completed</div>
+                    <div class="metric-small">{{ analyticsData.totalRoutes }} routes</div>
                 </div>
             </div>
 
-            <!-- Recent Routes Card -->
             <div class="analytics-card routes-card">
                 <div class="card-icon">🚛</div>
                 <div class="card-content">
@@ -235,12 +289,24 @@
                             <span class="route-distance">{{ route.totalDistanceKm | number:'1.0-0' }} km</span>
                         </div>
                     </div>
-                    <div class="metric-small" *ngIf="recentRoutes.length === 0">
-                        No routes yet
-                    </div>
+                    <div class="metric-small" *ngIf="recentRoutes.length === 0">No routes yet</div>
                 </div>
             </div>
         </div>
     </div>
 
+</div>
+
+<!-- ✅ MAP MODAL POPUP - Map always loaded, modal shows/hides -->
+<div class="map-modal-overlay" [class.hidden]="!showMapModal" (click)="closeMapModal()">
+    <div class="map-modal-container" (click)="$event.stopPropagation()">
+        <div class="map-modal-header">
+            <h2>🗺️ Live Map</h2>
+            <button class="modal-close-btn" (click)="closeMapModal()">✕</button>
+        </div>
+        <div class="map-modal-body">
+            <!-- ✅ Map always in DOM, just hidden when modal is closed -->
+            <app-map></app-map>
+        </div>
+    </div>
 </div>
