@@ -1,1 +1,7 @@
-<app-dashboard></app-dashboard>
+<div class="app-container">
+  <div class="loading-overlay" *ngIf="loading">
+    <div class="spinner"></div>
+    <p>Loading...</p>
+  </div>
+  <router-outlet></router-outlet>
+</div>

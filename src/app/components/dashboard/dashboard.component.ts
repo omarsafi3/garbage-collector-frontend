@@ -1,18 +1,32 @@
 import { Component, OnInit, OnDestroy, ViewEncapsulation, PLATFORM_ID, Inject } from '@angular/core';
 import { CommonModule, isPlatformBrowser } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { DashboardService, DepartmentStats, VehicleInfo } from '../services/dashboard.service';
+import { DashboardService, DepartmentStats, VehicleInfo } from '../../services/dashboard.service';
 import { MapComponent } from '../map/map.component';
-import { DepartmentService } from '../services/department.service';
-import { WebSocketService } from '../services/web-socket-service';
-import { RouteProgressUpdate } from '../models/websocket-dtos';
+import { DepartmentService } from '../../services/department.service';
+import { WebSocketService } from '../../services/web-socket-service';
+import { RouteProgressUpdate, VehicleStatusUpdate } from '../../models/websocket-dtos';
 import { ChangeDetectorRef } from '@angular/core';
-import { AnalyticsService } from '../services/analytics.service';
-import { RouteService } from '../services/route.service';
+import { AnalyticsService, DepartmentSummary, RecentRoute } from '../../services/analytics.service';
+import { RouteService, AvailableRoute } from '../../services/route.service';
 import { FormsModule } from '@angular/forms';
-import { EmployeeService } from '../services/employee.service'; // ✅ NEW
-import { Employee } from '../models/employee';
+import { EmployeeService, Employee } from '../../services/employee.service';
+import { AuthService } from '../../services/auth.service';
 
+interface ActiveTruck {
+  vehicleId: string;
+  progress: number;
+  routeId?: string;
+  currentStop?: number;
+  totalStops?: number;
+}
+
+interface VehicleProgress {
+  currentStop: number;
+  totalStops: number;
+  binId: string;
+  fillLevel: number;
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -27,32 +41,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
   selectedDeptVehicles: VehicleInfo[] = [];
   loading = true;
   selectedDepartment: DepartmentStats | null = null;
-  departmentRoutes: any[] = [];
+  departmentRoutes: AvailableRoute[] = [];
   loadingRoutes = false;
-  vehicleProgress: Map<string, { currentStop: number; totalStops: number; binId: string; fillLevel: number }> = new Map();
-  activeTrucks: Map<string, any> = new Map();
-  departmentStats: any = null;
-  department: any = null;
-  employees: any[] = [];
+  vehicleProgress: Map<string, VehicleProgress> = new Map();
+  activeTrucks: Map<string, ActiveTruck> = new Map();
+  departmentStats: DepartmentStats | null = null;
+  department: DepartmentStats | null = null;
+  employees: Employee[] = [];
   private activeRoutes: Set<string> = new Set();
-  private refreshInterval?: any;
+  private refreshInterval?: ReturnType<typeof setInterval>;
 
-  analyticsData: any = null;
-  recentRoutes: any[] = [];
+  analyticsData: DepartmentSummary | null = null;
+  recentRoutes: RecentRoute[] = [];
   loadingAnalytics = false;
 
-  availableRoutes: any[] = [];
+  availableRoutes: AvailableRoute[] = [];
 
-  // ✅ NEW: Employee management
-  availableEmployees: any[] = [];
-  vehicleEmployees: Map<string, string[]> = new Map(); // vehicleId -> [employeeId1, employeeId2]
+  availableEmployees: Employee[] = [];
+  vehicleEmployees: Map<string, string[]> = new Map();
 
   private routeProgressSub?: Subscription;
   private routeCompletionSub?: Subscription;
   private vehicleUpdateSub?: Subscription;
   unloadingVehicles: Set<string> = new Set();
 
-  private readonly CURRENT_DEPARTMENT_ID = '6920266d0b737026e2496c54';
+  private get currentDepartmentId(): string {
+    return this.authService.getDepartmentId() || '';
+  }
 
   constructor(
     private dashboardService: DashboardService,
@@ -61,97 +76,83 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private routeService: RouteService,
     private analyticsService: AnalyticsService,
-    private employeeService: EmployeeService, // ✅ NEW
+    public authService: AuthService,
+    private employeeService: EmployeeService,
     @Inject(PLATFORM_ID) private platformId: Object
   ) { }
 
-  ngOnInit() {
-    console.log('🚀 Dashboard loading...');
+  ngOnInit(): void {
     this.loadCurrentDepartment();
     this.setupWebSocketListeners();
     this.loadAvailableRoutes();
-    this.loadAvailableEmployees(); // ✅ NEW
+    this.loadAvailableEmployees();
 
     setTimeout(() => {
-      console.log('📍 Auto-fetching pre-generated routes...');
       this.showAllRoutes();
     }, 1000);
 
-    window.addEventListener('vehicle-route-completed', (e: any) => {
+    window.addEventListener('vehicle-route-completed', ((e: CustomEvent) => {
       const { vehicleId, binsCollected } = e.detail;
       this.onRouteCompleted(vehicleId, binsCollected);
-    });
+    }) as EventListener);
 
-    window.addEventListener('vehicle-at-bin', (e: any) => {
+    window.addEventListener('vehicle-at-bin', ((e: CustomEvent) => {
       const { vehicleId, binId, currentStop, totalStops, fillLevel } = e.detail;
       this.updateVehicleProgress(vehicleId, currentStop, totalStops, binId, fillLevel || 0);
-    });
+    }) as EventListener);
 
-    window.addEventListener('vehicle-started', (e: any) => {
+    window.addEventListener('vehicle-started', ((e: CustomEvent) => {
       const { vehicleId } = e.detail;
       this.activeTrucks.set(vehicleId, { vehicleId, progress: 0 });
-    });
+    }) as EventListener);
 
     this.refreshInterval = setInterval(() => {
       if (this.activeRoutes.size > 0 && this.selectedDepartment) {
-        console.log('🔄 Refreshing vehicles (routes active)');
         this.loadVehicles(this.selectedDepartment.departmentId);
       }
     }, 5000);
   }
 
-  // ✅ NEW: Load available employees
-  loadAvailableEmployees() {
+  loadAvailableEmployees(): void {
     this.employeeService.getAvailableEmployees().subscribe({
-      next: (employees: any[]) => {
+      next: (employees: Employee[]) => {
         this.availableEmployees = employees;
-        console.log('✅ Available employees:', employees.length);
         this.cdr.detectChanges();
       },
-      error: (err: any) => {
-        console.error('❌ Failed to load employees:', err);
-      }
+      error: () => { /* Handle silently */ }
     });
   }
 
-  // ✅ NEW: Assign employee to vehicle
-  assignEmployee(vehicleId: string, employeeSlot: number) {
+  assignEmployee(vehicleId: string, _employeeSlot: number): void {
     if (!this.vehicleEmployees.has(vehicleId)) {
       this.vehicleEmployees.set(vehicleId, ['', '']);
     }
-    // Employee selection happens via dropdown binding
   }
 
-  // ✅ NEW: Get assigned employees for vehicle
   getAssignedEmployees(vehicleId: string): string[] {
     return this.vehicleEmployees.get(vehicleId) || ['', ''];
   }
 
-  // ✅ NEW: Get employee name by ID
   getEmployeeName(employeeId: string): string {
     const emp = this.availableEmployees.find(e => e.id === employeeId);
     return emp ? `${emp.firstName} ${emp.lastName}` : 'Select Employee';
   }
 
-  // ✅ NEW: Check if vehicle can be dispatched (has 2 employees + route)
   canDispatch(vehicleId: string, selectedRouteId: string | undefined): boolean {
     const employees = this.getAssignedEmployees(vehicleId);
-    const hasTwoEmployees = !!(employees[0] && employees[1] && employees[0] !== employees[1]); // ✅ Double negation converts to boolean
-    const hasRoute = !!(selectedRouteId && selectedRouteId !== ''); // ✅ Double negation converts to boolean
+    const hasTwoEmployees = !!(employees[0] && employees[1] && employees[0] !== employees[1]);
+    const hasRoute = !!(selectedRouteId && selectedRouteId !== '');
     return hasTwoEmployees && hasRoute;
   }
-  // ✅ ADD THESE PROPERTIES
-  showMapModal: boolean = false;
 
-  // ✅ ADD THESE METHODS
+  showMapModal = false;
 
   openMapModal(): void {
-  this.showMapModal = true;
-  // ✅ Trigger the map resize event
-  setTimeout(() => {
-    window.dispatchEvent(new CustomEvent('map-modal-opened'));
-  }, 100);
-}
+    this.showMapModal = true;
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('map-modal-opened'));
+    }, 100);
+  }
 
 
   closeMapModal(): void {
@@ -204,16 +205,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
 
-  loadAvailableRoutes() {
-    this.routeService.getAvailableRoutes(this.CURRENT_DEPARTMENT_ID).subscribe({
-      next: (routes: any[]) => {
+  loadAvailableRoutes(): void {
+    if (!this.currentDepartmentId) return;
+    
+    this.routeService.getAvailableRoutes(this.currentDepartmentId).subscribe({
+      next: (routes: AvailableRoute[]) => {
         this.availableRoutes = routes;
-        console.log('✅ Available routes loaded:', routes.length);
         this.cdr.detectChanges();
       },
-      error: (err: any) => {
-        console.error('❌ Failed to load routes:', err);
-      }
+      error: () => { /* Handle silently */ }
     });
   }
 
@@ -233,36 +233,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return colors[index % colors.length];
   }
 
-  // ✅ UPDATED: Dispatch with employee assignment
-  dispatchVehicleWithRoute(vehicleId: string, routeId: string | undefined) {
+  dispatchVehicleWithRoute(vehicleId: string, routeId: string | undefined): void {
     if (!routeId) {
-      alert('⚠️ Please select a route first!');
+      alert('Please select a route first!');
       return;
     }
 
     const employees = this.getAssignedEmployees(vehicleId);
     if (!employees[0] || !employees[1]) {
-      alert('⚠️ Please assign 2 employees before dispatching!');
+      alert('Please assign 2 employees before dispatching!');
       return;
     }
 
     if (employees[0] === employees[1]) {
-      alert('⚠️ Please select 2 different employees!');
+      alert('Please select 2 different employees!');
       return;
     }
 
-    console.log(`🚀 Dispatching vehicle ${vehicleId} with route ${routeId} and employees:`, employees);
-
-    // ✅ First assign employees to vehicle
     this.employeeService.assignEmployeesToVehicle(vehicleId, employees).subscribe({
       next: () => {
-        console.log('✅ Employees assigned to vehicle');
-
-        // Then assign route and start
-        this.routeService.assignRouteToVehicle(routeId, vehicleId, this.CURRENT_DEPARTMENT_ID).subscribe({
-          next: (result: any) => {
-            console.log(`✅ Route assigned and started:`, result);
-
+        this.routeService.assignRouteToVehicle(routeId, vehicleId, this.currentDepartmentId).subscribe({
+          next: () => {
             this.activeTrucks.set(vehicleId, {
               vehicleId: vehicleId,
               progress: 0,
@@ -274,48 +265,37 @@ export class DashboardComponent implements OnInit, OnDestroy {
             }));
 
             this.availableRoutes = this.availableRoutes.filter(r => r.routeId !== routeId);
-            this.vehicleEmployees.delete(vehicleId); // Clear employee selection
-
-            // Reload available employees
+            this.vehicleEmployees.delete(vehicleId);
             this.loadAvailableEmployees();
 
             const vehicle = this.selectedDeptVehicles.find(v => v.id === vehicleId);
             if (vehicle) {
-              (vehicle as any).selectedRouteId = '';
+              vehicle.selectedRouteId = '';
             }
 
             this.cdr.detectChanges();
           },
-          error: (err: any) => {
-            console.error('❌ Failed to assign route:', err);
+          error: (err: { error?: { error?: string }; message?: string }) => {
             alert(err.error?.error || 'Failed to assign route to vehicle');
           }
         });
       },
-      error: (err: any) => {
-        console.error('❌ Failed to assign employees:', err);
+      error: (err: { error?: { error?: string }; message?: string }) => {
         alert(err.error?.error || 'Failed to assign employees to vehicle');
       }
     });
   }
 
-  // Rest of your existing methods remain the same...
-  // (I'll continue in next message if needed)
-
-  dispatchVehicle(vehicleId: string) {
-    console.log(`🚀 Dispatching vehicle: ${vehicleId}`);
-
+  dispatchVehicle(vehicleId: string): void {
     if (this.availableRoutes.length === 0) {
-      alert('❌ No available routes! All routes are assigned or no bins need collection.');
+      alert('No available routes! All routes are assigned or no bins need collection.');
       return;
     }
 
     const route = this.availableRoutes[0];
-    console.log(`📦 Assigning route ${route.routeId} to vehicle ${vehicleId}`);
 
-    this.routeService.assignRouteToVehicle(route.routeId, vehicleId, this.CURRENT_DEPARTMENT_ID).subscribe({
-      next: (result: any) => {
-        console.log(`✅ Route assigned and started:`, result);
+    this.routeService.assignRouteToVehicle(route.routeId, vehicleId, this.currentDepartmentId).subscribe({
+      next: () => {
         this.activeTrucks.set(vehicleId, {
           vehicleId: vehicleId,
           progress: 0,
@@ -324,27 +304,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.availableRoutes = this.availableRoutes.filter(r => r.routeId !== route.routeId);
         this.cdr.detectChanges();
       },
-      error: (err: any) => {
-        console.error('❌ Failed to assign route:', err);
+      error: (err: { error?: { error?: string }; message?: string }) => {
         alert(err.error?.error || 'Failed to assign route to vehicle');
       }
     });
   }
 
-  dispatchAllAvailable() {
+  dispatchAllAvailable(): void {
     const availableVehicles = this.getAvailableVehiclesOnly();
 
     if (availableVehicles.length === 0) {
-      alert('❌ No available vehicles to dispatch!');
+      alert('No available vehicles to dispatch!');
       return;
     }
 
     if (this.availableRoutes.length < availableVehicles.length) {
-      alert(`⚠️ Not enough routes! You have ${availableVehicles.length} vehicles but only ${this.availableRoutes.length} routes available.`);
+      alert(`Not enough routes! You have ${availableVehicles.length} vehicles but only ${this.availableRoutes.length} routes available.`);
       return;
     }
-
-    console.log(`🚀🚀 Dispatching ${availableVehicles.length} vehicles`);
 
     availableVehicles.forEach((vehicle, index) => {
       if (this.availableRoutes[index]) {
@@ -353,15 +330,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     });
   }
 
-  onVehicleUnloading(vehicleId: string) {
+  onVehicleUnloading(vehicleId: string): void {
     this.unloadingVehicles.add(vehicleId);
-    console.log(`🏭 Vehicle ${vehicleId} started unloading at depot...`);
   }
 
-  private setupWebSocketListeners() {
+  private setupWebSocketListeners(): void {
     this.routeProgressSub = this.webSocketService.getRouteProgressUpdates().subscribe(
       (update: RouteProgressUpdate) => {
-        console.log('📊 Route progress update:', update);
         this.vehicleProgress.set(update.vehicleId, {
           currentStop: update.currentStop,
           totalStops: update.totalStops,
@@ -381,24 +356,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
     );
 
     this.routeCompletionSub = this.webSocketService.getRouteCompletionUpdates().subscribe(
-      (event: any) => {
-        console.log('✅ Route completed:', event);
+      (event) => {
         this.onRouteCompleted(event.vehicleId, event.binsCollected);
         this.loadAvailableRoutes();
-        this.loadAvailableEmployees(); // ✅ Reload employees when route completes
+        this.loadAvailableEmployees();
         this.cdr.detectChanges();
       }
     );
 
     this.vehicleUpdateSub = this.webSocketService.getVehicleUpdates().subscribe(
-      (update: any) => {
-        console.log('🚛 Vehicle update:', update);
+      (update: VehicleStatusUpdate) => {
         if (update.status === 'UNLOADING') {
           this.onVehicleUnloading(update.vehicleId);
         }
         if (update.status === 'AVAILABLE' && this.unloadingVehicles.has(update.vehicleId)) {
           this.unloadingVehicles.delete(update.vehicleId);
-          console.log(`✅ Vehicle ${update.vehicleId} finished unloading!`);
         }
         if (update.vehicleId && update.fillLevel !== undefined) {
           this.updateVehicleFillLevel(update.vehicleId, update.fillLevel);
@@ -412,20 +384,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
 
-  private updateVehicleFillLevel(vehicleId: string, fillLevel: number) {
+  private updateVehicleFillLevel(vehicleId: string, fillLevel: number): void {
     const vehicleIndex = this.selectedDeptVehicles.findIndex(v => v.id === vehicleId);
     if (vehicleIndex !== -1) {
       this.selectedDeptVehicles[vehicleIndex].fillLevel = fillLevel;
-      console.log(`Updated vehicle ${vehicleId} fill to ${fillLevel}%`);
       this.cdr.detectChanges();
     }
   }
 
-  private updateVehicleAvailability(vehicleId: string, available: boolean) {
+  private updateVehicleAvailability(vehicleId: string, available: boolean): void {
     const vehicleIndex = this.selectedDeptVehicles.findIndex(v => v.id === vehicleId);
     if (vehicleIndex !== -1) {
       this.selectedDeptVehicles[vehicleIndex].available = available;
-      console.log(`Updated vehicle ${vehicleId} availability: ${available ? 'READY' : 'BUSY'}`);
     }
   }
 
@@ -446,60 +416,61 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return '';
   }
 
-  loadDepartmentEmployees() {
-    this.departmentService.getDepartmentEmployees(this.CURRENT_DEPARTMENT_ID).subscribe({
+  loadDepartmentEmployees(): void {
+    if (!this.currentDepartmentId) return;
+    
+    this.departmentService.getDepartmentEmployees(this.currentDepartmentId).subscribe({
       next: (employees) => {
-        console.log('👷 Employees loaded:', employees.length);
         this.employees = employees;
       },
-      error: (err) => console.log('ℹ️ No employees')
+      error: () => { /* Handle silently */ }
     });
   }
 
-  loadAnalytics() {
+  loadAnalytics(): void {
     if (!this.selectedDepartment) return;
     this.loadingAnalytics = true;
+    
     this.analyticsService.getDepartmentSummary(this.selectedDepartment.departmentId).subscribe({
       next: (data) => {
         this.analyticsData = data;
         this.loadingAnalytics = false;
-        console.log('📊 Analytics loaded:', data);
       },
-      error: (error) => {
-        console.error('Error loading analytics:', error);
+      error: () => {
         this.loadingAnalytics = false;
       }
     });
     this.analyticsService.getRecentRoutes(this.selectedDepartment.departmentId, 3).subscribe({
       next: (routes) => {
         this.recentRoutes = routes;
-        console.log('📜 Recent routes:', routes);
       },
-      error: (error) => {
-        console.error('Error loading routes:', error);
-      }
+      error: () => { /* Handle silently */ }
     });
   }
 
-  loadDepartmentVehicles() {
-    this.dashboardService.getDepartmentVehicles(this.CURRENT_DEPARTMENT_ID).subscribe({
+  loadDepartmentVehicles(): void {
+    if (!this.currentDepartmentId) return;
+    
+    this.dashboardService.getDepartmentVehicles(this.currentDepartmentId).subscribe({
       next: (vehicles) => {
-        console.log('🚛 Vehicles loaded:', vehicles.length);
         this.selectedDeptVehicles = vehicles;
       },
-      error: (err) => console.log('ℹ️ No vehicles')
+      error: () => { /* Handle silently */ }
     });
   }
 
-  loadCurrentDepartment() {
+  loadCurrentDepartment(): void {
+    if (!this.currentDepartmentId) {
+      this.loading = false;
+      return;
+    }
+    
     this.loading = true;
-    this.departmentService.getDepartmentById(this.CURRENT_DEPARTMENT_ID).subscribe({
-      next: (dept: any) => {
-        console.log('✅ Department loaded:', dept.name);
-        this.department = dept;
-        this.departmentStats = dept;
-        const deptId = dept.id || dept._id || this.CURRENT_DEPARTMENT_ID;
-        console.log('🆔 Using department ID:', deptId);
+    this.departmentService.getDepartmentById(this.currentDepartmentId).subscribe({
+      next: (dept) => {
+        this.department = dept as unknown as DepartmentStats;
+        this.departmentStats = dept as unknown as DepartmentStats;
+        const deptId = dept.id || this.currentDepartmentId;
         this.selectedDepartment = {
           departmentId: deptId,
           departmentName: dept.name,
@@ -519,8 +490,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loadDepartmentEmployees();
         this.loadAnalytics();
       },
-      error: (err: any) => {
-        console.error('❌ Failed to load department:', err);
+      error: () => {
         this.loading = false;
       }
     });
@@ -536,30 +506,26 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
   }
 
-  trackActiveRoute(vehicleId: string) {
+  trackActiveRoute(vehicleId: string): void {
     this.activeRoutes.add(vehicleId);
-    console.log(`📍 Tracking ${this.activeRoutes.size} active routes`);
   }
 
-  updateVehicleProgress(vehicleId: string, currentStop: number, totalStops: number, binId: string, fillLevel: number = 0) {
+  updateVehicleProgress(vehicleId: string, currentStop: number, totalStops: number, binId: string, fillLevel = 0): void {
     this.vehicleProgress.set(vehicleId, {
       currentStop,
       totalStops,
       binId,
       fillLevel
     });
-    console.log(`📊 Vehicle ${vehicleId}: Stop ${currentStop}/${totalStops} at bin ${binId} - Fill: ${fillLevel}%`);
   }
 
-  showAllRoutes() {
-    console.log('🗺️ Show all routes clicked from dashboard');
+  showAllRoutes(): void {
     window.dispatchEvent(new CustomEvent('show-all-routes', {
-      detail: { departmentId: this.CURRENT_DEPARTMENT_ID }
+      detail: { departmentId: this.currentDepartmentId }
     }));
   }
 
-  clearAllRoutes() {
-    console.log('🧹 Clear routes clicked from dashboard');
+  clearAllRoutes(): void {
     window.dispatchEvent(new CustomEvent('clear-all-routes'));
     this.departmentRoutes = [];
     this.activeTrucks.clear();
@@ -567,82 +533,72 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.vehicleProgress.clear();
   }
 
-  onRouteCompleted(vehicleId: string, binsCollected: number) {
+  onRouteCompleted(vehicleId: string, binsCollected: number): void {
     this.activeRoutes.delete(vehicleId);
     this.vehicleProgress.delete(vehicleId);
     this.activeTrucks.delete(vehicleId);
-    console.log(`✅ Route completed! ${this.activeRoutes.size} routes remaining`);
     const vehicle = this.selectedDeptVehicles.find(v => v.id === vehicleId);
     const vehicleName = vehicle?.reference || 'Vehicle';
-    alert(`✅ ${vehicleName} completed route!\nCollected ${binsCollected} bins`);
+    alert(`${vehicleName} completed route! Collected ${binsCollected} bins`);
     this.loadDepartmentVehicles();
   }
 
-  loadDepartments() {
-    console.log('📡 Fetching departments...');
+  loadDepartments(): void {
     this.loading = true;
     this.dashboardService.getDepartments().subscribe({
       next: (data) => {
-        console.log('✅ DEPARTMENTS LOADED:', data);
         this.departments = data;
         this.loading = false;
         if (data.length > 0 && !this.selectedDepartment) {
           this.selectDepartment(data[0]);
         }
       },
-      error: (err) => {
-        console.error('❌ LOAD ERROR:', err);
+      error: () => {
         this.loading = false;
         this.departments = [];
       }
     });
   }
 
-  selectDepartment(dept: DepartmentStats) {
+  selectDepartment(dept: DepartmentStats): void {
     this.selectedDepartment = dept;
-    console.log('🏢 Selected:', dept.departmentName);
     this.loadVehicles(dept.departmentId);
   }
 
-  loadVehicles(deptId: string) {
+  loadVehicles(deptId: string): void {
     this.dashboardService.getDepartmentVehicles(deptId).subscribe(vehicles => {
-      console.log('🚛 Vehicles:', vehicles);
       this.selectedDeptVehicles = vehicles;
     });
   }
 
-  showDepartmentRoutes() {
+  showDepartmentRoutes(): void {
     if (this.activeTrucks.size > 0) {
-      alert('❌ Routes are already executing! Clear them first.');
+      alert('Routes are already executing! Clear them first.');
       return;
     }
     this.loadingRoutes = true;
-    console.log('🗺️ Loading routes...');
-    this.dashboardService.getDepartmentRoutes(this.CURRENT_DEPARTMENT_ID)
+    this.dashboardService.getDepartmentRoutes(this.currentDepartmentId)
       .subscribe({
         next: (routes) => {
-          this.departmentRoutes = routes;
-          console.log('✅ Routes loaded:', routes);
+          this.departmentRoutes = routes as unknown as AvailableRoute[];
           this.loadingRoutes = false;
           window.dispatchEvent(new CustomEvent('show-department-routes', {
-            detail: { departmentId: this.CURRENT_DEPARTMENT_ID }
+            detail: { departmentId: this.currentDepartmentId }
           }));
         },
-        error: (err) => {
-          console.error('❌ Route load failed:', err);
+        error: () => {
           this.loadingRoutes = false;
           alert('Failed to load routes');
         }
       });
   }
 
-  clearRoutes() {
+  clearRoutes(): void {
     window.dispatchEvent(new CustomEvent('clear-routes'));
     this.departmentRoutes = [];
     this.activeTrucks.clear();
     this.activeRoutes.clear();
     this.vehicleProgress.clear();
-    console.log('🧹 Routes and active trucks cleared');
   }
 
   getVehicleName(vehicleId: string): string {
@@ -650,7 +606,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return vehicle?.reference || `Vehicle ${vehicleId.substring(0, 8)}`;
   }
 
-  getActiveTrucksArray(): any[] {
+  getActiveTrucksArray(): ActiveTruck[] {
     return Array.from(this.activeTrucks.values());
   }
 
@@ -682,85 +638,64 @@ export class DashboardComponent implements OnInit, OnDestroy {
     }
     return available ? '✓ Ready' : '⏸️ Busy';
   }
-  // ✅ NEW METHOD 1: Manual route generation
   manualGenerateRoutes(): void {
     if (!this.selectedDepartment) {
-      console.warn('⚠️ No department selected');
       return;
     }
 
-    console.log('🔄 Manually generating routes...');
-
-    this.routeService.generateRoutes(this.CURRENT_DEPARTMENT_ID).subscribe({
+    this.routeService.generateRoutes(this.currentDepartmentId).subscribe({
       next: (response) => {
-        console.log('✅ Routes generated:', response);
-        alert(`✅ Generated ${response.routeCount} new routes!`);
-
-        // Refresh available routes
+        alert(`Generated ${response.routeCount} new routes!`);
         this.loadAvailableRoutes();
       },
-      error: (err) => {
-        console.error('❌ Route generation failed:', err);
+      error: (err: { error?: { error?: string }; message?: string }) => {
         alert('Failed to generate routes: ' + (err.error?.error || err.message));
       }
     });
   }
 
-  // ✅ NEW METHOD 2: Check critical bins manually
   checkCriticalBins(): void {
-    console.log('🔍 Checking critical bins...');
-
     this.routeService.checkCriticalBins().subscribe({
-      next: (response) => {
-        console.log('✅ Critical bins checked:', response);
-        alert('✅ Critical bins check complete!');
-
-        // Refresh available routes
+      next: () => {
+        alert('Critical bins check complete!');
         this.loadAvailableRoutes();
       },
-      error: (err) => {
-        console.error('❌ Critical bin check failed:', err);
+      error: (err: { error?: { error?: string }; message?: string }) => {
         alert('Failed to check critical bins: ' + (err.error?.error || err.message));
       }
     });
   }
 
-  // ✅ NEW METHOD 3: Updated dispatch all with better error handling
   dispatchAllAvailableWithEmployees(): void {
     const availableVehicles = this.getAvailableVehiclesOnly();
 
     if (availableVehicles.length === 0) {
-      alert('❌ No available vehicles to dispatch!');
+      alert('No available vehicles to dispatch!');
       return;
     }
 
     if (this.availableRoutes.length < availableVehicles.length) {
-      alert(`⚠️ Not enough routes! You have ${availableVehicles.length} vehicles but only ${this.availableRoutes.length} routes available.`);
+      alert(`Not enough routes! You have ${availableVehicles.length} vehicles but only ${this.availableRoutes.length} routes available.`);
       return;
     }
 
-    // Check if all vehicles have 2 employees assigned
     const vehiclesWithoutEmployees = availableVehicles.filter(vehicle => {
       const employees = this.getAssignedEmployees(vehicle.id);
       return !employees[0] || !employees[1] || employees[0] === employees[1];
     });
 
     if (vehiclesWithoutEmployees.length > 0) {
-      alert(`⚠️ ${vehiclesWithoutEmployees.length} vehicle(s) don't have 2 employees assigned. Please assign employees to all vehicles first.`);
+      alert(`${vehiclesWithoutEmployees.length} vehicle(s) don't have 2 employees assigned. Please assign employees to all vehicles first.`);
       return;
     }
 
-    console.log(`🚀🚀 Dispatching ${availableVehicles.length} vehicles with employees`);
-
-    // Dispatch each vehicle with its assigned employees
     availableVehicles.forEach((vehicle, index) => {
       if (this.availableRoutes[index]) {
         const route = this.availableRoutes[index];
         setTimeout(() => {
           this.dispatchVehicleWithRoute(vehicle.id, route.routeId);
-        }, index * 500); // Stagger dispatches by 500ms
+        }, index * 500);
       }
     });
   }
-
 }

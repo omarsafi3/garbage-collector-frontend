@@ -1,9 +1,9 @@
 import { Component, OnInit, OnDestroy, Inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser, CommonModule } from '@angular/common';
 import { Subscription } from 'rxjs';
-import { BinService } from '../services/bin-service';
-import { DepartmentService } from '../services/department.service';
-import { WebSocketService } from '../services/web-socket-service';
+import { BinService } from '../../services/bin-service';
+import { DepartmentService } from '../../services/department.service';
+import { WebSocketService } from '../../services/web-socket-service';
 import { FormsModule } from '@angular/forms';
 import {
   Bin,
@@ -11,9 +11,9 @@ import {
   TruckPositionUpdate,
   RouteProgressUpdate,
   RouteCompletionEvent
-} from '../models/websocket-dtos';
-import { RouteService } from '../services/route.service';
-import { IncidentService, Incident } from '../services/incident.service';
+} from '../../models/websocket-dtos';
+import { RouteService } from '../../services/route.service';
+import { IncidentService, Incident } from '../../services/incident.service';
 
 @Component({
   selector: 'app-map',
@@ -81,7 +81,6 @@ export class MapComponent implements OnInit, OnDestroy {
       // Event listeners
       window.addEventListener('vehicle-started', (e: any) => {
         const { vehicleId } = e.detail;
-        console.log('🎯 Map received vehicle-started event:', vehicleId);
         this.activeTrucks.set(vehicleId, {
           vehicleId: vehicleId,
           progress: 0
@@ -91,40 +90,33 @@ export class MapComponent implements OnInit, OnDestroy {
       window.addEventListener('show-all-routes', (e: any) => {
         const departmentId = e.detail?.departmentId;
         if (departmentId) {
-          console.log('📍 Dashboard requested show routes for:', departmentId);
           this.loadAvailableRoutes(departmentId);
         }
       });
 
       window.addEventListener('clear-all-routes', () => {
-        console.log('🧹 Dashboard requested clear routes');
         this.clearAllRoutes();
       });
 
       window.addEventListener('routes-generated', (e: any) => {
         const departmentId = e.detail?.departmentId || '6920266d0b737026e2496c54';
-        console.log('🔄 Routes regenerated - refreshing map:', departmentId);
         this.loadAvailableRoutes(departmentId);
       });
 
       window.addEventListener('map-modal-opened', () => {
-        console.log('📍 Map modal opened - resizing');
         setTimeout(() => {
           if (this.map) {
             this.map.invalidateSize();
-            console.log('🗺️ Map resized (100ms)');
           }
         }, 100);
         setTimeout(() => {
           if (this.map) {
             this.map.invalidateSize();
-            console.log('🗺️ Map resized (300ms)');
           }
         }, 300);
         setTimeout(() => {
           if (this.map) {
             this.map.invalidateSize();
-            console.log('🗺️ Map resized (500ms)');
           }
         }, 500);
       });
@@ -132,7 +124,6 @@ export class MapComponent implements OnInit, OnDestroy {
       window.addEventListener('resolve-incident', (e: any) => {
         const incidentId = e.detail?.id;
         if (incidentId) {
-          console.log(`🔧 Resolving incident from popup: ${incidentId}`);
           this.resolveIncident(incidentId);
         }
       });
@@ -186,36 +177,29 @@ export class MapComponent implements OnInit, OnDestroy {
     );
 
     this.incidentSub = this.webSocketService.getIncidentUpdates().subscribe(
-      (incident: Incident) => {
-        console.log('🚨 Incident update received:', incident);
-        this.updateIncidentMarker(incident);
+      (incident) => {
+        this.updateIncidentMarker(incident as unknown as Incident);
       }
     );
 
-    // ✅ Subscribe to route updates (rerouting)
     this.routeUpdateSub = this.webSocketService.getRouteUpdates().subscribe(
-      (routeUpdate: any) => {
-        console.log('🔄 Route update received:', routeUpdate);
+      (routeUpdate) => {
         this.handleRouteUpdate(routeUpdate);
       }
     );
   }
 
-  private subscribeToRouteGeneration() {
+  private subscribeToRouteGeneration(): void {
     this.routeGenerationSub = this.webSocketService.getRouteGenerationUpdates().subscribe({
-      next: (event: any) => {
-        console.log('🔄 Routes regenerated via WebSocket:', event);
+      next: (event) => {
         const departmentId = event.departmentId || '6920266d0b737026e2496c54';
         const routeCount = event.routeCount || 0;
         if (routeCount > 0) {
-          console.log(`📡 Auto-refreshing ${routeCount} new routes for department ${departmentId}`);
           this.loadAvailableRoutes(departmentId);
-          this.showNotification(`🔄 ${routeCount} new route(s) available!`);
+          this.showNotification(`${routeCount} new route(s) available!`);
         }
       },
-      error: (error: any) => {
-        console.error('❌ Route generation subscription error:', error);
-      }
+      error: () => { /* Handle silently */ }
     });
   }
 
@@ -291,13 +275,10 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   private showRouteProgress(vehicleId: string, currentStop: number, totalStops: number, fillLevel: number) {
-    console.log(`📊 Vehicle ${vehicleId}: Stop ${currentStop}/${totalStops} (Fill: ${fillLevel}%)`);
     this.updateTruckProgressIndicator(vehicleId, fillLevel);
   }
 
   private onRouteComplete(vehicleId: string, binsCollected: number) {
-    console.log(`✅ Vehicle ${vehicleId} completed route: ${binsCollected} bins`);
-
     const marker = this.vehicleMarkers.get(vehicleId);
     if (marker) {
       const element = marker.getElement();
@@ -318,7 +299,6 @@ export class MapComponent implements OnInit, OnDestroy {
                   truck.latitude = dept.latitude;
                   truck.longitude = dept.longitude;
                   truck.progress = 100;
-                  console.log(`🏁 Truck ${vehicleId} returned to department`);
                 },
                 error: () => {
                   console.warn(`Could not find department for ${vehicleId}`);
@@ -339,7 +319,6 @@ export class MapComponent implements OnInit, OnDestroy {
           this.vehicleMarkers.delete(vehicleId);
           this.activeTrucks.delete(vehicleId);
           this.clearAllRoutes();
-          console.log(`🗑️ Truck marker removed`);
         }, 10000);
       }, 1000);
     }
@@ -349,7 +328,6 @@ export class MapComponent implements OnInit, OnDestroy {
 
 
   clearAllRoutes() {
-    console.log('🧹 Clearing all routes and markers');
     this.vehicleMarkers.forEach(marker => {
       this.map.removeLayer(marker);
     });
@@ -365,7 +343,7 @@ export class MapComponent implements OnInit, OnDestroy {
   }
 
   private showNotification(message: string) {
-    console.log(`🔔 ${message}`);
+    // Could implement toast notification UI here
   }
 
   // ============ MAP INITIALIZATION ============
@@ -401,17 +379,13 @@ export class MapComponent implements OnInit, OnDestroy {
       status: 'normal'
     };
 
-    console.log(`♻ Creating new bin at (${lat.toFixed(4)}, ${lng.toFixed(4)})`);
-
     this.binService.createBin(newBin).subscribe({
       next: (createdBin: Bin) => {
-        console.log('✅ Bin created:', createdBin);
         this.addBinMarker(this.L, createdBin);
-        this.showNotification(`✅ Bin created at (${lat.toFixed(2)}, ${lng.toFixed(2)})`);
+        this.showNotification(`Bin created at (${lat.toFixed(2)}, ${lng.toFixed(2)})`);
       },
-      error: (error: any) => {
-        console.error('❌ Failed to create bin:', error);
-        this.showNotification('❌ Failed to create bin');
+      error: () => {
+        this.showNotification('Failed to create bin');
       }
     });
   }
@@ -419,12 +393,10 @@ export class MapComponent implements OnInit, OnDestroy {
   private saveDepartmentLocation(dept: Department) {
     this.departmentService.updateDepartment(dept.id, dept).subscribe({
       next: (updated: Department) => {
-        console.log('✅ Department location saved to database:', updated);
-        this.showNotification(`✅ Saved ${dept.name} at (${dept.latitude?.toFixed(4)}, ${dept.longitude?.toFixed(4)})`);
+        this.showNotification(`Saved ${dept.name} at (${dept.latitude?.toFixed(4)}, ${dept.longitude?.toFixed(4)})`);
       },
-      error: (error: any) => {
-        console.error('❌ Failed to save department location:', error);
-        this.showNotification('❌ Failed to save department location');
+      error: () => {
+        this.showNotification('Failed to save department location');
       }
     });
   }
@@ -439,12 +411,10 @@ export class MapComponent implements OnInit, OnDestroy {
       this.isAddingBin = false;
       this.isReportingIncident = false;
       this.map.getContainer().style.cursor = 'move';
-      console.log('🏢 Department moving mode enabled - drag a department to move it');
     } else {
       this.isMovingDepartment = false;
       this.selectedDepartmentId = null;
       this.map.getContainer().style.cursor = 'grab';
-      console.log('🏢 Department moving mode disabled');
     }
   }
 
@@ -545,7 +515,6 @@ export class MapComponent implements OnInit, OnDestroy {
             this.selectedDepartmentId = dept.id;
             this.selectedDepartmentMarker = marker;
             this.map.getContainer().style.cursor = 'grabbing';
-            console.log(`🔵 Selected department: ${dept.name} (dragging...)`);
           }
         });
 
@@ -554,8 +523,6 @@ export class MapComponent implements OnInit, OnDestroy {
             const newLatLng = marker.getLatLng();
             dept.latitude = newLatLng.lat;
             dept.longitude = newLatLng.lng;
-            console.log(`📍 Department ${dept.name} moved to (${newLatLng.lat.toFixed(4)}, ${newLatLng.lng.toFixed(4)})`);
-            console.log(`💾 Saving to database...`);
             this.saveDepartmentLocation(dept);
             this.map.getContainer().style.cursor = 'move';
           }
@@ -727,10 +694,8 @@ export class MapComponent implements OnInit, OnDestroy {
 
   // ============ ROUTE VISUALIZATION ============
   private loadAvailableRoutes(departmentId: string) {
-    console.log(`🗺️ Loading available routes for department ${departmentId}`);
     this.routeService.getAvailableRoutes(departmentId).subscribe({
       next: (routes: any[]) => {
-        console.log('✅ Received routes:', routes);
 
         this.routePolylines.forEach((polyline, key) => {
           if (!this.activeTrucks.has(key)) {
@@ -766,8 +731,7 @@ export class MapComponent implements OnInit, OnDestroy {
           this.selectedVehicleId = this.availableVehicles[0].id;
         }
       },
-      error: (error: any) => {
-        console.error('❌ Failed to load routes:', error);
+      error: () => {
         this.showNotification('Failed to load routes');
       }
     });
@@ -803,8 +767,6 @@ export class MapComponent implements OnInit, OnDestroy {
       const color = colors[index % colors.length];
       const routeName = routeNames[index % routeNames.length];
 
-      console.log(`🚛 Drawing ${routeName} (${routeId}): ${bins.length} bins`);
-
       if (polyline && polyline.length > 0) {
         const latLngs = polyline.map((point: any) => {
           if (typeof point === 'object' && point.latitude !== undefined && point.longitude !== undefined) {
@@ -816,11 +778,8 @@ export class MapComponent implements OnInit, OnDestroy {
         }).filter((point: any) => point !== null);
 
         if (latLngs.length === 0) {
-          console.warn(`⚠️ No valid coordinates in polyline for route ${routeId}`);
           return;
         }
-
-        console.log(`📍 Drawing polyline with ${latLngs.length} points`);
 
         const line = this.L.polyline(latLngs, {
           color: color,
@@ -846,8 +805,6 @@ export class MapComponent implements OnInit, OnDestroy {
           const labelMarker = this.L.marker(startPoint, { icon: labelIcon }).addTo(this.map);
           this.routeMarkers.push(labelMarker);
         }
-      } else {
-        console.warn(`⚠️ No polyline data for route ${routeId}`);
       }
 
       bins.forEach((bin: any, stopIndex: number) => {
@@ -869,19 +826,16 @@ export class MapComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log(`🚀 Executing route ${this.selectedVehicleId}`);
     this.activeTrucks.set(this.selectedVehicleId, {
       vehicleId: this.selectedVehicleId,
       progress: 0
     });
 
     this.routeService.executeManagedRoute('6920266d0b737026e2496c54', this.selectedVehicleId).subscribe({
-      next: (data: any) => {
-        console.log('✅ Route started:', data);
+      next: () => {
         this.showNotification(`Route started for ${this.selectedVehicleId}`);
       },
-      error: (error: any) => {
-        console.error('❌ Failed to start route:', error);
+      error: () => {
         this.activeTrucks.delete(this.selectedVehicleId);
         this.showNotification('Failed to start route');
       }
@@ -895,21 +849,17 @@ export class MapComponent implements OnInit, OnDestroy {
       return;
     }
 
-    console.log(`🚀🚀 Executing routes for ${availableVehicles.length} available vehicles`);
     availableVehicles.forEach(vehicle => {
       const vId = vehicle.id || vehicle.routeId;
       this.activeTrucks.set(vId, {
         vehicleId: vId,
         progress: 0,
-        lastPolylineRefresh: 0  // ✅ ADD THIS
+        lastPolylineRefresh: 0
       });
 
       this.routeService.executeManagedRoute('6920266d0b737026e2496c54', vId).subscribe({
-        next: (data: any) => {
-          console.log(`✅ Route started for ${vId}`);
-        },
-        error: (error: any) => {
-          console.error(`❌ Failed to start route for ${vId}:`, error);
+        next: () => { /* Route started successfully */ },
+        error: () => {
           this.activeTrucks.delete(vId);
         }
       });
@@ -928,7 +878,6 @@ export class MapComponent implements OnInit, OnDestroy {
   private loadActiveVehicles() {
     this.routeService.getActiveVehicles().subscribe({
       next: (activeVehicles: any[]) => {
-        console.log(`🚛 Found ${activeVehicles.length} active vehicles`);
         activeVehicles.forEach(vehicle => {
           const vehicleId = vehicle.vehicleId;
 
@@ -937,7 +886,7 @@ export class MapComponent implements OnInit, OnDestroy {
             progress: vehicle.fillLevel || 0,
             latitude: vehicle.latitude,
             longitude: vehicle.longitude,
-            lastPolylineRefresh: 0  // ✅ ADD THIS
+            lastPolylineRefresh: 0
           });
 
           if (vehicle.latitude && vehicle.longitude) {
@@ -947,20 +896,16 @@ export class MapComponent implements OnInit, OnDestroy {
               vehicle.longitude,
               vehicle.fillLevel || 0
             );
-            console.log(`✅ Restored vehicle marker: ${vehicle.reference || vehicleId}`);
           }
 
           if (vehicle.activeRouteId) {
             this.routeService.getActiveRoute(vehicleId).subscribe({
               next: (route: any) => {
                 if (route && route.fullRoutePolyline) {
-                  console.log(`🗺️ Restoring route for vehicle ${vehicleId}`);
                   this.drawRoutePolyline(route.fullRoutePolyline, vehicleId);
                 }
               },
-              error: (error: any) => {
-                console.error(`❌ Failed to load route for vehicle ${vehicleId}:`, error);
-              }
+              error: () => { /* Handle silently */ }
             });
           }
         });
@@ -969,15 +914,12 @@ export class MapComponent implements OnInit, OnDestroy {
           this.showNotification(`Restored ${activeVehicles.length} active vehicle(s)`);
         }
       },
-      error: (error: any) => {
-        console.error('❌ Failed to load active vehicles:', error);
-      }
+      error: () => { /* Handle silently */ }
     });
   }
 
   private drawRoutePolyline(polyline: any[], vehicleId?: string) {
     if (!polyline || polyline.length === 0) {
-      console.warn('⚠️ No polyline data to draw');
       return;
     }
 
@@ -991,7 +933,6 @@ export class MapComponent implements OnInit, OnDestroy {
     }).filter((point: any) => point !== null);
 
     if (latLngs.length === 0) {
-      console.error('❌ Could not transform polyline data');
       return;
     }
 
@@ -1005,8 +946,6 @@ export class MapComponent implements OnInit, OnDestroy {
     if (vehicleId) {
       this.routePolylines.set(vehicleId, routeLine);
     }
-
-    console.log(`✅ Drew route polyline with ${latLngs.length} points`);
 
     if (latLngs.length > 0) {
       this.map.fitBounds(latLngs, { padding: [50, 50] });
@@ -1023,15 +962,12 @@ export class MapComponent implements OnInit, OnDestroy {
   private loadActiveIncidents() {
     this.incidentService.getActiveIncidents().subscribe({
       next: (incidents: Incident[]) => {
-        console.log(`🚨 Found ${incidents.length} active incidents`);
         this.incidents = incidents;
         incidents.forEach(incident => {
           this.addIncidentMarker(incident);
         });
       },
-      error: (error: any) => {
-        console.error('❌ Failed to load incidents:', error);
-      }
+      error: () => { /* Handle silently */ }
     });
   }
 
@@ -1109,7 +1045,6 @@ export class MapComponent implements OnInit, OnDestroy {
     `);
 
     this.incidentCircles.set(incident.id!, circle);
-    console.log(`✅ Added incident marker at (${incident.latitude}, ${incident.longitude})`);
   }
 
   private updateIncidentMarker(incident: Incident) {
@@ -1155,14 +1090,12 @@ export class MapComponent implements OnInit, OnDestroy {
     }
 
     this.incidentService.reportRoadBlock(lat, lng, 0.5, description).subscribe({
-      next: (incident: Incident) => {
-        console.log('✅ Incident reported:', incident);
-        this.showNotification('🚨 Road block reported successfully!');
+      next: () => {
+        this.showNotification('Road block reported successfully!');
         this.isReportingIncident = false;
         this.map.getContainer().style.cursor = '';
       },
-      error: (error: any) => {
-        console.error('❌ Failed to report incident:', error);
+      error: () => {
         this.showNotification('Failed to report incident');
         this.isReportingIncident = false;
         this.map.getContainer().style.cursor = '';
@@ -1175,20 +1108,13 @@ export class MapComponent implements OnInit, OnDestroy {
     const vehicleId = routeUpdate.vehicleId;
     const newPolyline = routeUpdate.polyline;
 
-    console.log('🔄 [REROUTE] Route update received for vehicle:', vehicleId);
-    console.log('🔄 [REROUTE] Polyline length:', newPolyline?.length || 0);
-    console.log('🔄 [REROUTE] First point:', newPolyline?.[0]);
-    console.log('🔄 [REROUTE] Last point:', newPolyline?.[newPolyline.length - 1]);
-
     if (!newPolyline || newPolyline.length === 0) {
-      console.error('❌ [REROUTE] No polyline data received!');
       return;
     }
 
     // Remove old polyline
     const oldPolyline = this.routePolylines.get(vehicleId);
     if (oldPolyline) {
-      console.log('🗑️ [REROUTE] Removing old polyline for vehicle:', vehicleId);
       if (this.map && this.map.hasLayer(oldPolyline)) {
         this.map.removeLayer(oldPolyline);
       }
@@ -1196,24 +1122,20 @@ export class MapComponent implements OnInit, OnDestroy {
     }
 
     // Draw new polyline
-    console.log('📍 [REROUTE] Drawing new polyline...');
     this.drawRoutePolylineDebug(newPolyline, vehicleId);
 
-    this.showNotification(`🔄 Vehicle ${vehicleId.substring(0, 8)} REROUTED!`);
+    this.showNotification(`Vehicle ${vehicleId.substring(0, 8)} REROUTED!`);
   }
 
   private drawRoutePolylineDebug(polyline: any[], vehicleId?: string): void {
-    console.log('🎨 [DRAW] Starting polyline draw. Input length:', polyline?.length);
-
     if (!polyline || polyline.length === 0) {
-      console.error('❌ [DRAW] No polyline provided');
       return;
     }
 
     // Transform with extreme robustness
     const latLngs: [number, number][] = [];
 
-    polyline.forEach((point: any, index: number) => {
+    polyline.forEach((point: any) => {
       let lat: number | null = null;
       let lng: number | null = null;
 
@@ -1228,15 +1150,10 @@ export class MapComponent implements OnInit, OnDestroy {
 
       if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
         latLngs.push([lat, lng]);
-      } else {
-        console.warn(`⚠️ [DRAW] Skipping invalid point at index ${index}:`, point);
       }
     });
 
-    console.log('✅ [DRAW] Transformed to', latLngs.length, 'valid coordinates');
-
     if (latLngs.length === 0) {
-      console.error('❌ [DRAW] No valid coordinates could be extracted!');
       return;
     }
 
@@ -1256,8 +1173,6 @@ export class MapComponent implements OnInit, OnDestroy {
         this.routePolylines.set(vehicleId, routeLine);
       }
 
-      console.log(`✅ [DRAW] Polyline drawn successfully! ${latLngs.length} points, Color: NEON GREEN`);
-
       // Fit map to show the route
       if (this.map && latLngs.length > 0) {
         setTimeout(() => {
@@ -1265,12 +1180,10 @@ export class MapComponent implements OnInit, OnDestroy {
             padding: [100, 100],
             maxZoom: 17
           });
-          console.log('📺 [DRAW] Map zoomed to fit new route');
         }, 100);
       }
-
-    } catch (error) {
-      console.error('❌ [DRAW] Failed to draw polyline:', error);
+    } catch {
+      // Handle drawing error silently
     }
   }
   private refreshActiveRoutePolyline(vehicleId: string) {
@@ -1322,17 +1235,12 @@ private drawActiveRoutePolyline(polyline: any[], vehicleId: string) {
   }).addTo(this.map);
 
   this.routePolylines.set(vehicleId, routeLine);
-  console.log(`✅ Active route ${vehicleId}: ${latLngs.length} points`);
 }
 
   resolveIncident(incidentId: string) {
     this.incidentService.resolveIncident(incidentId).subscribe({
-      next: () => {
-        console.log(`✅ Incident ${incidentId} resolved`);
-      },
-      error: (error: any) => {
-        console.error('❌ Failed to resolve incident:', error);
-      }
+      next: () => { /* Incident resolved successfully */ },
+      error: () => { /* Handle error silently */ }
     });
   }
 
@@ -1341,10 +1249,8 @@ private drawActiveRoutePolyline(polyline: any[], vehicleId: string) {
     if (this.isAddingBin) {
       this.isReportingIncident = false;
       this.map.getContainer().style.cursor = 'crosshair';
-      console.log('🔵 Bin adding mode enabled - click map to add bins');
     } else {
       this.map.getContainer().style.cursor = 'grab';
-      console.log('🔵 Bin adding mode disabled');
     }
 
     // Make resolveIncident available globally

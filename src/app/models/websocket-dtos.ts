@@ -1,13 +1,19 @@
+// Re-export shared models
+export { Bin } from './bin';
+export { Department } from './department';
+
 export interface TruckPositionUpdate {
   vehicleId: string;
   latitude: number;
   longitude: number;
   progressPercent: number;
 }
+
 export interface VehicleStatusUpdate {
   vehicleId: string;
-  status: string;  // 'AVAILABLE', 'UNLOADING', 'IN_ROUTE', etc.
+  status: 'AVAILABLE' | 'UNLOADING' | 'IN_ROUTE' | 'RETURNING';
   fillLevel?: number;
+  available?: boolean;
   timestamp?: string;
 }
 
@@ -22,19 +28,4 @@ export interface RouteProgressUpdate {
 export interface RouteCompletionEvent {
   vehicleId: string;
   binsCollected: number;
-}
-
-export interface Bin {
-  id: string;
-  latitude: number;
-  longitude: number;
-  fillLevel: number;
-  status: string;
-}
-
-export interface Department {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
 }

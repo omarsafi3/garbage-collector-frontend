@@ -1,0 +1,54 @@
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-header">
+      <h1>🗑️ Waste Management System</h1>
+      <p>Municipality Fleet Management Platform</p>
+    </div>
+
+    <form (ngSubmit)="onSubmit()" #loginForm="ngForm">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input 
+          type="text" 
+          id="username"
+          name="username"
+          [(ngModel)]="credentials.username"
+          placeholder="Enter your username"
+          required
+          [disabled]="loading"
+        >
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input 
+          type="password" 
+          id="password"
+          name="password"
+          [(ngModel)]="credentials.password"
+          placeholder="Enter your password"
+          required
+          [disabled]="loading"
+        >
+      </div>
+
+      <div class="error-message" *ngIf="errorMessage">
+        ⚠️ {{ errorMessage }}
+      </div>
+
+      <button 
+        type="submit" 
+        class="login-btn"
+        [disabled]="!loginForm.valid || loading"
+      >
+        <span *ngIf="!loading">🔐 Sign In</span>
+        <span *ngIf="loading">⏳ Signing in...</span>
+      </button>
+    </form>
+
+    <div class="login-footer">
+      <p><strong>Chief:</strong> SUPER_ADMIN access</p>
+      <p><strong>Department Manager:</strong> ADMIN access</p>
+    </div>
+  </div>
+</div>

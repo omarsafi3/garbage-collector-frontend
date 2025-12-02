@@ -4,12 +4,46 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { RouteBin } from '../models/route';
 import { DepartmentRoute } from '../models/department-route';
+import { environment } from '../../environments/environment';
+
+export interface RouteGenerationResponse {
+  routeCount: number;
+  departmentId: string;
+  generatedAt: Date;
+}
+
+export interface AvailableRoute {
+  routeId: string;
+  binCount: number;
+  bins: RouteBin[];
+  polyline: Array<{ latitude: number; longitude: number }>;
+}
+
+export interface ActiveVehicle {
+  vehicleId: string;
+  reference: string;
+  latitude: number;
+  longitude: number;
+  fillLevel: number;
+  status: string;
+  activeRouteId?: string;
+  departmentId: string;
+}
+
+export interface ActiveRoute {
+  routeId: string;
+  vehicleId: string;
+  bins: RouteBin[];
+  fullRoutePolyline: Array<{ latitude: number; longitude: number }>;
+  currentStopIndex: number;
+  status: string;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class RouteService {
-  private baseUrl = 'http://localhost:8080/api/routes';
+  private readonly baseUrl = `${environment.apiUrl}/api/routes`;
 
   constructor(private http: HttpClient) { }
 
@@ -68,48 +102,46 @@ export class RouteService {
     return this.http.get(`${this.baseUrl}/department/${departmentId}/route-info`);
   }
   
-  getAvailableRoutes(departmentId: string): Observable<any[]> {
-    return this.http.get<any[]>(`${this.baseUrl}/department/${departmentId}/available-routes`);
+  getAvailableRoutes(departmentId: string): Observable<AvailableRoute[]> {
+    return this.http.get<AvailableRoute[]>(`${this.baseUrl}/department/${departmentId}/available-routes`);
   }
 
-  assignRouteToVehicle(routeId: string, vehicleId: string, departmentId: string): Observable<any> {
-    return this.http.post(`${this.baseUrl}/assign-route`, null, {
+  assignRouteToVehicle(routeId: string, vehicleId: string, departmentId: string): Observable<{ success: boolean; message: string }> {
+    return this.http.post<{ success: boolean; message: string }>(`${this.baseUrl}/assign-route`, null, {
       params: { routeId, vehicleId, departmentId }
     });
   }
 
-  // ✅ NEW METHODS BELOW
-
   /**
    * Manual route generation trigger
    */
-  generateRoutes(departmentId: string): Observable<any> {
-    return this.http.post<any>(`${this.baseUrl}/department/${departmentId}/generate`, null);
+  generateRoutes(departmentId: string): Observable<RouteGenerationResponse> {
+    return this.http.post<RouteGenerationResponse>(`${this.baseUrl}/department/${departmentId}/generate`, null);
   }
 
   /**
    * Manually check critical bins
    */
-  checkCriticalBins(): Observable<any> {
-    return this.http.post<any>(`${this.baseUrl}/check-critical-bins`, null);
+  checkCriticalBins(): Observable<{ checked: boolean; criticalCount: number }> {
+    return this.http.post<{ checked: boolean; criticalCount: number }>(`${this.baseUrl}/check-critical-bins`, null);
   }
 
   /**
    * Dispatch all available vehicles
    */
-  dispatchAllVehicles(departmentId: string): Observable<any> {
+  dispatchAllVehicles(departmentId: string): Observable<{ dispatched: number }> {
     const params = new HttpParams().set('departmentId', departmentId);
-    return this.http.post<any>(`${this.baseUrl}/execute-all-managed`, null, { params });
+    return this.http.post<{ dispatched: number }>(`${this.baseUrl}/execute-all-managed`, null, { params });
   }
-getActiveVehicles(): Observable<any[]> {
-  return this.http.get<any[]>(`${this.baseUrl}/active-vehicles`);
-}
 
-/**
- * ✅ Get active route for a vehicle
- */
-getActiveRoute(vehicleId: string): Observable<any> {
-  return this.http.get<any>(`${this.baseUrl}/active-route/${vehicleId}`);
-}
+  getActiveVehicles(): Observable<ActiveVehicle[]> {
+    return this.http.get<ActiveVehicle[]>(`${this.baseUrl}/active-vehicles`);
+  }
 
+  /**
+   * Get active route for a vehicle
+   */
+  getActiveRoute(vehicleId: string): Observable<ActiveRoute> {
+    return this.http.get<ActiveRoute>(`${this.baseUrl}/active-route/${vehicleId}`);
+  }
 }

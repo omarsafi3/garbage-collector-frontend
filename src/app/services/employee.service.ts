@@ -1,23 +1,25 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { Employee } from '../models/employee';
 
+export { Employee } from '../models/employee';
 
-export interface Employee {
-  id: string;
-  firstName: string;
-  lastName: string;
-  available: boolean;
-  status: 'AVAILABLE' | 'ASSIGNED' | 'IN_ROUTE';
-  assignedVehicleId?: string;
-  department?: any;
+export interface AssignEmployeesRequest {
+  employeeIds: string[];
+}
+
+export interface EmployeeCheckResponse {
+  hasRequiredEmployees: boolean;
+  employeeCount: number;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class EmployeeService {
-  private apiUrl = "http://localhost:8080/api/employees";
+  private readonly apiUrl = `${environment.apiUrl}/api/employees`;
 
   constructor(private http: HttpClient) { }
 
@@ -42,20 +44,19 @@ export class EmployeeService {
   }
 
   // Assign 2 employees to a vehicle
-  assignEmployeesToVehicle(vehicleId: string, employeeIds: string[]): Observable<any> {
-    return this.http.post(`${this.apiUrl}/assign/${vehicleId}`, {
-      employeeIds: employeeIds
-    });
+  assignEmployeesToVehicle(vehicleId: string, employeeIds: string[]): Observable<Employee[]> {
+    const request: AssignEmployeesRequest = { employeeIds };
+    return this.http.post<Employee[]>(`${this.apiUrl}/assign/${vehicleId}`, request);
   }
 
   // Release employees from a vehicle
-  releaseEmployeesFromVehicle(vehicleId: string): Observable<any> {
-    return this.http.post(`${this.apiUrl}/release/${vehicleId}`, {});
+  releaseEmployeesFromVehicle(vehicleId: string): Observable<Employee[]> {
+    return this.http.post<Employee[]>(`${this.apiUrl}/release/${vehicleId}`, {});
   }
 
   // Check if vehicle has required employees
-  checkRequiredEmployees(vehicleId: string): Observable<any> {
-    return this.http.get(`${this.apiUrl}/check-required/${vehicleId}`);
+  checkRequiredEmployees(vehicleId: string): Observable<EmployeeCheckResponse> {
+    return this.http.get<EmployeeCheckResponse>(`${this.apiUrl}/check-required/${vehicleId}`);
   }
 
   // Get employee by ID

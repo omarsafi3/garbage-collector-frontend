@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { timeout, catchError } from 'rxjs/operators';
+import { environment } from '../../environments/environment';
 
 export interface DepartmentStats {
   departmentId: string;
@@ -24,13 +25,14 @@ export interface VehicleInfo {
   plate: string;
   fillLevel: number;
   available: boolean;
-  selectedRouteId?: string;  // ✅ ADD THIS LINE
+  selectedRouteId?: string;
 }
+
 @Injectable({
   providedIn: 'root'
 })
 export class DashboardService {
-  private readonly apiUrl = 'http://localhost:8080/api/dashboard';
+  private readonly apiUrl = `${environment.apiUrl}/api/dashboard`;
 
   constructor(private http: HttpClient) { }
 
@@ -42,58 +44,38 @@ export class DashboardService {
   }
 
   getDepartmentVehicles(deptId: string): Observable<VehicleInfo[]> {
-  // ✅ CORRECT URL: /api/departments/{id}/vehicles (exists!)
-  const url = `http://localhost:8080/api/departments/${deptId}/vehicles`;
-  console.log('🚛 Fetching vehicles:', url);
-  
-  return this.http.get<VehicleInfo[]>(url).pipe(
-    timeout(5000),
-    catchError(err => {
-      console.error('❌ Vehicles error:', err);
-      return of([]); // Empty fallback
-    })
-  );
-}
-
-  // 🔥 NEW ROUTE ENDPOINTS
-  getDepartmentRoutes(deptId: string): Observable<any> {
-    // ✅ CORRECT URL: /api/routes/optimize/department?departmentId=...
-    const url = `http://localhost:8080/api/routes/optimize/department?departmentId=${deptId}`;
-    console.log('🗺️ Fetching department routes:', url);
-    return this.http.get<any>(url).pipe(
-      timeout(10000),
-      catchError(err => {
-        console.error('❌ Routes error:', err);
-        return of([]); // Fallback to empty
-      })
+    const url = `${environment.apiUrl}/api/departments/${deptId}/vehicles`;
+    return this.http.get<VehicleInfo[]>(url).pipe(
+      timeout(5000),
+      catchError(() => of([]))
     );
   }
 
-  getVehicleRoute(deptId: string, vehicleId: string): Observable<any> {
-    // ✅ CORRECT URL: /api/routes/optimize?departmentId=...&vehicleId=...
-    const url = `http://localhost:8080/api/routes/optimize?departmentId=${deptId}&vehicleId=${vehicleId}`;
-    console.log('🚛 Fetching single vehicle route:', url);
-    return this.http.get<any>(url).pipe(
+  getDepartmentRoutes(deptId: string): Observable<DepartmentStats[]> {
+    const url = `${environment.apiUrl}/api/routes/optimize/department?departmentId=${deptId}`;
+    return this.http.get<DepartmentStats[]>(url).pipe(
       timeout(10000),
-      catchError(err => {
-        console.error('❌ Single route error:', err);
-        return of([]);
-      })
+      catchError(() => of([]))
     );
   }
 
-  executeAllDepartmentRoutes(deptId: string): Observable<any> {
-    // TODO: Add backend endpoint later
-    console.log('🚀 Execute ALL routes (mock)');
+  getVehicleRoute(deptId: string, vehicleId: string): Observable<VehicleInfo[]> {
+    const url = `${environment.apiUrl}/api/routes/optimize?departmentId=${deptId}&vehicleId=${vehicleId}`;
+    return this.http.get<VehicleInfo[]>(url).pipe(
+      timeout(10000),
+      catchError(() => of([]))
+    );
+  }
+
+  executeAllDepartmentRoutes(deptId: string): Observable<{ success: boolean }> {
     return of({ success: true });
   }
 
-  executeVehicleRoute(vehicleId: string, routeData: any): Observable<any> {
-    // ✅ CORRECT URL: /api/routes/execute?vehicleId=... 
-    const url = `http://localhost:8080/api/routes/execute?vehicleId=${vehicleId}`;
-    return this.http.post(url, routeData).pipe(
+  executeVehicleRoute(vehicleId: string, routeData: unknown): Observable<{ success: boolean }> {
+    const url = `${environment.apiUrl}/api/routes/execute?vehicleId=${vehicleId}`;
+    return this.http.post<{ success: boolean }>(url, routeData).pipe(
       timeout(5000),
-      catchError(() => of({ success: true })) // Mock success for now
+      catchError(() => of({ success: true }))
     );
   }
 }

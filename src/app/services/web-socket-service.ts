@@ -1,120 +1,122 @@
 import { Injectable } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
-import { map } from 'rxjs/operators';
 import {
   Bin,
   TruckPositionUpdate,
   RouteProgressUpdate,
-  RouteCompletionEvent
+  RouteCompletionEvent,
+  VehicleStatusUpdate
 } from '../models/websocket-dtos';
+import { environment } from '../../environments/environment';
 
-declare var SockJS: any;
-declare var Stomp: any;
+declare const SockJS: new (url: string) => WebSocket;
+declare const Stomp: { over: (socket: WebSocket) => StompClient };
+
+interface StompClient {
+  connect: (headers: Record<string, string>, successCallback: (frame: unknown) => void, errorCallback: (error: unknown) => void) => void;
+  disconnect: (callback: () => void) => void;
+  subscribe: (destination: string, callback: (message: StompMessage) => void) => void;
+}
+
+interface StompMessage {
+  body: string;
+}
+
+export interface RouteGenerationEvent {
+  event: 'ROUTES_GENERATED';
+  departmentId: string;
+  routeCount: number;
+}
+
+export interface RouteUpdateEvent {
+  vehicleId: string;
+  polyline: Array<{ latitude: number; longitude: number }>;
+  reason?: string;
+}
 
 @Injectable({
   providedIn: 'root'
 })
 export class WebSocketService {
-  private stompClient: any;
+  private stompClient: StompClient | null = null;
   private isConnected = false;
 
-  // Subjects for manual subscriptions
+  // Typed Subjects
   private binUpdateSubject = new Subject<Bin>();
-  private vehicleUpdateSubject = new Subject<any>();
+  private vehicleUpdateSubject = new Subject<VehicleStatusUpdate>();
   private truckPositionSubject = new Subject<TruckPositionUpdate>();
   private routeProgressSubject = new Subject<RouteProgressUpdate>();
   private routeCompletionSubject = new Subject<RouteCompletionEvent>();
-  private routeGenerationSubject = new Subject<any>();
-  private incidentSubject = new Subject<any>();
-  private routeUpdateSubject = new Subject<any>();
-  constructor() { }
+  private routeGenerationSubject = new Subject<RouteGenerationEvent>();
+  private incidentSubject = new Subject<{ id: string; type: string; status: string; latitude: number; longitude: number; radiusKm: number; description?: string }>();
+  private routeUpdateSubject = new Subject<RouteUpdateEvent>();
 
-  connect(serverUrl: string = 'http://localhost:8080/ws'): void {
+  connect(serverUrl: string = environment.wsUrl): void {
     if (this.isConnected) {
-      console.log('WebSocket already connected');
       return;
     }
-
 
     const socket = new SockJS(serverUrl);
     this.stompClient = Stomp.over(socket);
 
     this.stompClient.connect({},
-      (frame: any) => {
-        console.log('✅ Connected to WebSocket:', frame);
+      () => {
         this.isConnected = true;
 
-        // ✅ Subscribe to bin updates
-        this.stompClient.subscribe('/topic/bins', (message: any) => {
+        // Subscribe to bin updates
+        this.stompClient!.subscribe('/topic/bins', (message: StompMessage) => {
           const bin: Bin = JSON.parse(message.body);
-          console.log('📍 Received bin update:', bin);
           this.binUpdateSubject.next(bin);
         });
 
-
-
-        // ✅ Subscribe to vehicle updates (legacy)
-        this.stompClient.subscribe('/topic/vehicles', (message: any) => {
-          console.log('🚚 Received vehicle update:', message.body);
-          const vehicleUpdate: any = JSON.parse(message.body);
+        // Subscribe to vehicle updates
+        this.stompClient!.subscribe('/topic/vehicles', (message: StompMessage) => {
+          const vehicleUpdate: VehicleStatusUpdate = JSON.parse(message.body);
           this.vehicleUpdateSubject.next(vehicleUpdate);
         });
 
-        // ✅ Subscribe to truck position updates (NEW - backend-managed)
-        this.stompClient.subscribe('/topic/truck-position', (message: any) => {
+        // Subscribe to truck position updates
+        this.stompClient!.subscribe('/topic/truck-position', (message: StompMessage) => {
           const update: TruckPositionUpdate = JSON.parse(message.body);
-          console.log('🚛 Truck position:', update.vehicleId, `[${update.latitude}, ${update.longitude}]`, `${update.progressPercent}%`);
           this.truckPositionSubject.next(update);
         });
 
-        // ✅ Subscribe to route progress updates (NEW - bin collection)
-        this.stompClient.subscribe('/topic/route-progress', (message: any) => {
+        // Subscribe to route progress updates
+        this.stompClient!.subscribe('/topic/route-progress', (message: StompMessage) => {
           const update: RouteProgressUpdate = JSON.parse(message.body);
-          console.log('📊 Route progress:', update.vehicleId, `Stop ${update.currentStop}/${update.totalStops}`, `Fill: ${update.vehicleFillLevel}%`);
           this.routeProgressSubject.next(update);
         });
 
-        // ✅ Subscribe to route completion events (NEW)
-        this.stompClient.subscribe('/topic/route-completion', (message: any) => {
+        // Subscribe to route completion events
+        this.stompClient!.subscribe('/topic/route-completion', (message: StompMessage) => {
           const event: RouteCompletionEvent = JSON.parse(message.body);
-          console.log('✅ Route completed:', event.vehicleId, `${event.binsCollected} bins`);
           this.routeCompletionSubject.next(event);
         });
 
-        this.stompClient.subscribe('/topic/routes', (message: any) => {
+        this.stompClient!.subscribe('/topic/routes', (message: StompMessage) => {
           const event = JSON.parse(message.body);
-
           if (event.event === 'ROUTES_GENERATED') {
-            console.log('🔄 Route generation event received:', event);
-            this.routeGenerationSubject.next(event);
+            this.routeGenerationSubject.next(event as RouteGenerationEvent);
           } else if (event.vehicleId && event.polyline) {
-            console.log('🔄 Route update (reroute) received:', event.vehicleId);
-            this.routeUpdateSubject.next(event);
+            this.routeUpdateSubject.next(event as RouteUpdateEvent);
           }
         });
 
-        // ✅ NEW: Subscribe to route updates (rerouting) on separate topic
-        this.stompClient.subscribe('/topic/route-update', (message: any) => {
-          const routeUpdate = JSON.parse(message.body);
-          console.log('🔄 Route update (reroute) received via /topic/route-update:', routeUpdate);
+        // Subscribe to route updates (rerouting)
+        this.stompClient!.subscribe('/topic/route-update', (message: StompMessage) => {
+          const routeUpdate: RouteUpdateEvent = JSON.parse(message.body);
           this.routeUpdateSubject.next(routeUpdate);
         });
 
-
-        this.stompClient.subscribe('/topic/incidents', (message: any) => {
+        this.stompClient!.subscribe('/topic/incidents', (message: StompMessage) => {
           const incident = JSON.parse(message.body);
-          console.log('🚨 Incident update via WebSocket:', incident);
           this.incidentSubject.next(incident);
         });
-
       },
-      (error: any) => {
-        console.error('❌ WebSocket connection error:', error);
+      () => {
         this.isConnected = false;
-
         // Attempt to reconnect after 5 seconds
         setTimeout(() => {
-          console.log('🔄 Attempting to reconnect...');
           this.connect(serverUrl);
         }, 5000);
       }
@@ -124,26 +126,24 @@ export class WebSocketService {
   disconnect(): void {
     if (this.stompClient && this.isConnected) {
       this.stompClient.disconnect(() => {
-        console.log('❌ Disconnected from WebSocket');
         this.isConnected = false;
       });
     }
   }
-  getRouteUpdates(): Observable<any> {
+
+  getRouteUpdates(): Observable<RouteUpdateEvent> {
     return this.routeUpdateSubject.asObservable();
   }
-
-
-  // ============ OBSERVABLES ============
 
   getBinUpdates(): Observable<Bin> {
     return this.binUpdateSubject.asObservable();
   }
 
-  getVehicleUpdates(): Observable<any> {
+  getVehicleUpdates(): Observable<VehicleStatusUpdate> {
     return this.vehicleUpdateSubject.asObservable();
   }
-  getRouteGenerationUpdates(): Observable<any> {
+
+  getRouteGenerationUpdates(): Observable<RouteGenerationEvent> {
     return this.routeGenerationSubject.asObservable();
   }
 
@@ -163,7 +163,8 @@ export class WebSocketService {
   isWebSocketConnected(): boolean {
     return this.isConnected;
   }
-  getIncidentUpdates(): Observable<any> {
+
+  getIncidentUpdates(): Observable<{ id: string; type: string; status: string; latitude: number; longitude: number; radiusKm: number; description?: string }> {
     return this.incidentSubject.asObservable();
   }
 }

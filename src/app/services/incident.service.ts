@@ -1,25 +1,30 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { environment } from '../../environments/environment';
+import { Bin } from '../models/bin';
+
+export type IncidentType = 'ROAD_BLOCK' | 'OVERFILL' | 'VEHICLE_BREAKDOWN';
+export type IncidentStatus = 'ACTIVE' | 'RESOLVED';
 
 export interface Incident {
   id?: string;
-  type: string; // "ROAD_BLOCK", "OVERFILL", "VEHICLE_BREAKDOWN"
-  status: string; // "ACTIVE", "RESOLVED"
+  type: IncidentType;
+  status: IncidentStatus;
   latitude: number;
   longitude: number;
   radiusKm: number;
   description?: string;
   createdAt?: Date;
   resolvedAt?: Date;
-  bin?: any;
+  bin?: Bin;
 }
 
 @Injectable({
   providedIn: 'root'
 })
 export class IncidentService {
-  private apiUrl = 'http://localhost:8080/api/incidents';
+  private readonly apiUrl = `${environment.apiUrl}/api/incidents`;
 
   constructor(private http: HttpClient) {}
 

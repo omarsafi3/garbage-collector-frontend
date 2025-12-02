@@ -4,12 +4,13 @@ import { Observable } from 'rxjs';
 import { Department } from '../models/department';
 import { Employee } from '../models/employee';
 import { Vehicle } from '../models/vehicle';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class DepartmentService {
-  private apiUrl = 'http://localhost:8080/api/departments';
+  private readonly apiUrl = `${environment.apiUrl}/api/departments`;
 
   constructor(private http: HttpClient) {}
 
@@ -30,7 +31,7 @@ export class DepartmentService {
     return this.http.get<Vehicle[]>(`${this.apiUrl}/${departmentId}/vehicles`);
   }
 
-  addDepartment(department: Partial<Department>): Observable<Department> {
+  createDepartment(department: Partial<Department>): Observable<Department> {
     return this.http.post<Department>(this.apiUrl, department);
   }
   

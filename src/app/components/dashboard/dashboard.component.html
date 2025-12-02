@@ -1,4 +1,12 @@
 <div class="modern-dashboard">
+    <!-- Add this to the header -->
+<header class="dashboard-header">
+  <h1>🚛 Department Manager Dashboard</h1>
+  <div class="header-right">
+    <span class="dept-name">{{ department?.departmentName }}</span>
+    <button class="logout-btn" (click)="authService.logout()">🚪 Logout</button>
+  </div>
+</header>
 
     <!-- Top Bar -->
     <div class="control-bar">
@@ -48,7 +56,7 @@
                             <span [style.color]="getRouteColor(i)" style="font-size: 20px;">●</span>
                             🚛 {{ getVehicleName(truck.vehicleId) }}
                         </span>
-                        <span class="route-progress-badge">{{ truck.progress?.toFixed(0) || 0 }}%</span>
+                        <span class="route-progress-badge">{{ truck.progress.toFixed(0) || 0 }}%</span>
                     </div>
                     <div class="route-progress-bar">
                         <div class="route-progress-fill" [style.width.%]="truck.progress || 0"

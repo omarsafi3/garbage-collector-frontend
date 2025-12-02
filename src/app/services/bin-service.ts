@@ -2,12 +2,13 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { Bin } from '../models/bin';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class BinService {
-  private apiUrl = 'http://localhost:8080/bins'; // backend endpoint
+  private readonly apiUrl = `${environment.apiUrl}/bins`;
 
   constructor(private http: HttpClient) {}
 

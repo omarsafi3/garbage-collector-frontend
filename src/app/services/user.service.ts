@@ -4,13 +4,14 @@ import { Observable } from 'rxjs';
 import { LoginRequest } from '../models/loginRequest';
 import { LoginResponse } from '../models/loginResponse';
 import { User } from '../models/user';
+import { environment } from '../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class UserService {
 
-  private BASE_URL = 'http://localhost:8080/auth';
+  private BASE_URL = `${environment.apiUrl}/auth`;
 
   constructor(private http: HttpClient) {}
 
