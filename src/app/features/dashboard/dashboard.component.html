@@ -120,6 +120,18 @@
         </div>
       </div>
       <div class="header-actions">
+        <!-- Auto-Dispatch Toggle -->
+        <div class="auto-dispatch-toggle" [class.enabled]="autoDispatchEnabled">
+          <span class="toggle-label">Auto Dispatch</span>
+          <div class="toggle-switch" [class.active]="autoDispatchEnabled" (click)="toggleAutoDispatch()"></div>
+          <span class="toggle-status" [class.on]="autoDispatchEnabled" [class.off]="!autoDispatchEnabled">
+            {{ autoDispatchEnabled ? 'ON' : 'OFF' }}
+          </span>
+          <button class="trigger-btn" *ngIf="autoDispatchEnabled" (click)="triggerAutoDispatch()" title="Trigger Auto-Dispatch Now">
+            ⚡ Dispatch
+          </button>
+        </div>
+
         <!-- Notification Bell Component -->
         <app-notification-bell
           [notifications]="getNotificationsForBell()"
@@ -130,14 +142,6 @@
           (clearAll)="clearAllNotifications()">
         </app-notification-bell>
 
-        <button class="action-btn primary" (click)="manualGenerateRoutes()">
-          <span>🔄</span>
-          <span>Generate Routes</span>
-        </button>
-        <button class="action-btn warning" (click)="checkCriticalBins()">
-          <span>🚨</span>
-          <span>Critical Bins</span>
-        </button>
         <button class="action-btn secondary" (click)="openMapModal()">
           <span>🗺️</span>
           <span>Live Map</span>

@@ -34,6 +34,18 @@ export interface RouteUpdateEvent {
   reason?: string;
 }
 
+export interface AutoDispatchEvent {
+  event: 'AUTO_DISPATCH';
+  vehicleId: string;
+  vehicleReference: string;
+  routeId: string;
+  binCount: number;
+  driverName: string;
+  collectorName: string;
+  departmentId: string;
+  timestamp: string;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -50,6 +62,7 @@ export class WebSocketService {
   private routeGenerationSubject = new Subject<RouteGenerationEvent>();
   private incidentSubject = new Subject<{ id: string; type: string; status: string; latitude: number; longitude: number; radiusKm: number; description?: string }>();
   private routeUpdateSubject = new Subject<RouteUpdateEvent>();
+  private autoDispatchSubject = new Subject<AutoDispatchEvent>();
 
   connect(serverUrl: string = environment.wsUrl): void {
     if (this.isConnected) {
@@ -112,6 +125,12 @@ export class WebSocketService {
           const incident = JSON.parse(message.body);
           this.incidentSubject.next(incident);
         });
+
+        // Subscribe to auto-dispatch events
+        this.stompClient!.subscribe('/topic/auto-dispatch', (message: StompMessage) => {
+          const autoDispatchEvent: AutoDispatchEvent = JSON.parse(message.body);
+          this.autoDispatchSubject.next(autoDispatchEvent);
+        });
       },
       () => {
         this.isConnected = false;
@@ -165,5 +184,9 @@ export class WebSocketService {
 
   getIncidentUpdates(): Observable<{ id: string; type: string; status: string; latitude: number; longitude: number; radiusKm: number; description?: string }> {
     return this.incidentSubject.asObservable();
+  }
+
+  getAutoDispatchUpdates(): Observable<AutoDispatchEvent> {
+    return this.autoDispatchSubject.asObservable();
   }
 }

@@ -43,6 +43,26 @@ export class DashboardService {
     );
   }
 
+  getDepartmentStats(departmentId: string): Observable<DepartmentStats> {
+    return this.http.get<DepartmentStats>(`${this.apiUrl}/departments/${departmentId}`).pipe(
+      timeout(5000),
+      catchError(() => of({
+        departmentId: departmentId,
+        departmentName: '',
+        totalVehicles: 0,
+        availableVehicles: 0,
+        activeVehicles: 0,
+        totalEmployees: 0,
+        availableEmployees: 0,
+        totalBins: 0,
+        criticalBins: 0,
+        binsCollectedToday: 0,
+        averageFillLevel: 0,
+        co2Saved: 0
+      }))
+    );
+  }
+
   getDepartmentVehicles(deptId: string): Observable<VehicleInfo[]> {
     const url = `${environment.apiUrl}/api/departments/${deptId}/vehicles`;
     return this.http.get<VehicleInfo[]>(url).pipe(

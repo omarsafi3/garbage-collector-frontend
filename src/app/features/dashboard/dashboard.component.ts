@@ -38,6 +38,16 @@ interface BinNotification {
   dismissed: boolean;
 }
 
+interface DashboardNotification {
+  id: string;
+  type: 'bin-warning' | 'bin-critical' | 'route-completed' | 'vehicle-available' | 'vehicle-dispatched';
+  title: string;
+  message: string;
+  timestamp: Date;
+  dismissed: boolean;
+  data?: Record<string, unknown>;
+}
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
@@ -82,6 +92,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   showNotificationPanel = false;
   unreadNotificationCount = 0;
 
+  // Unified Notifications
+  dashboardNotifications: DashboardNotification[] = [];
+  private notifiedRouteCompletions: Set<string> = new Set();
+  private notifiedVehicleAvailability: Set<string> = new Set();
+
+  // Auto-dispatch
+  autoDispatchEnabled = true;
+  private autoDispatchSub?: Subscription;
+
   private get currentDepartmentId(): string {
     return this.authService.getDepartmentId() || '';
   }
@@ -103,6 +122,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.setupWebSocketListeners();
     this.loadAvailableRoutes();
     this.loadAvailableEmployees();
+    this.loadAutoDispatchStatus();
 
     setTimeout(() => {
       this.showAllRoutes();
@@ -430,6 +450,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.cdr.detectChanges();
       }
     );
+
+    // Subscribe to auto-dispatch events
+    this.autoDispatchSub = this.webSocketService.getAutoDispatchUpdates().subscribe(
+      (event) => {
+        console.log('Auto-dispatch event received:', event);
+        // Refresh routes and vehicles when auto-dispatch occurs
+        this.loadAvailableRoutes();
+        this.loadAvailableEmployees();
+        this.loadDepartmentVehicles();
+        this.cdr.detectChanges();
+      }
+    );
   }
 
   private checkBinForNotification(bin: Bin): void {
@@ -501,6 +533,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   clearAllNotifications(): void {
     this.binNotifications = [];
+    this.dashboardNotifications = [];
     this.unreadNotificationCount = 0;
     this.cdr.detectChanges();
   }
@@ -537,7 +570,28 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private updateVehicleAvailability(vehicleId: string, available: boolean): void {
     const vehicleIndex = this.selectedDeptVehicles.findIndex(v => v.id === vehicleId);
     if (vehicleIndex !== -1) {
+      const wasAvailable = this.selectedDeptVehicles[vehicleIndex].available;
       this.selectedDeptVehicles[vehicleIndex].available = available;
+      
+      // Notify when vehicle becomes available (was unavailable, now available)
+      if (!wasAvailable && available && !this.notifiedVehicleAvailability.has(vehicleId)) {
+        const vehicle = this.selectedDeptVehicles[vehicleIndex];
+        this.addDashboardNotification({
+          type: 'vehicle-available',
+          title: 'Vehicle Available',
+          message: `${vehicle.reference || 'Vehicle'} is now ready for dispatch`,
+          data: { vehicleId, vehicleName: vehicle.reference }
+        });
+        this.notifiedVehicleAvailability.add(vehicleId);
+        
+        // Reset after 60 seconds to allow re-notification
+        setTimeout(() => {
+          this.notifiedVehicleAvailability.delete(vehicleId);
+        }, 60000);
+      } else if (!available) {
+        // Vehicle is no longer available, reset notification flag
+        this.notifiedVehicleAvailability.delete(vehicleId);
+      }
     }
   }
 
@@ -549,6 +603,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.routeCompletionSub?.unsubscribe();
     this.vehicleUpdateSub?.unsubscribe();
     this.binUpdateSub?.unsubscribe();
+    this.autoDispatchSub?.unsubscribe();
   }
 
   getVehicleProgress(vehicleId: string): string {
@@ -632,9 +687,38 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.loadDepartmentVehicles();
         this.loadDepartmentEmployees();
         this.loadAnalytics();
+        this.loadDepartmentStats();
       },
       error: () => {
         this.loading = false;
+      }
+    });
+  }
+
+  loadDepartmentStats(): void {
+    if (!this.currentDepartmentId) return;
+    
+    this.dashboardService.getDepartmentStats(this.currentDepartmentId).subscribe({
+      next: (stats) => {
+        if (this.selectedDepartment) {
+          this.selectedDepartment = {
+            ...this.selectedDepartment,
+            totalBins: stats.totalBins || 0,
+            criticalBins: stats.criticalBins || 0,
+            averageFillLevel: stats.averageFillLevel || 0,
+            totalVehicles: stats.totalVehicles || 0,
+            activeVehicles: stats.activeVehicles || 0,
+            availableVehicles: stats.availableVehicles || 0,
+            totalEmployees: stats.totalEmployees || 0,
+            availableEmployees: stats.availableEmployees || 0,
+            binsCollectedToday: stats.binsCollectedToday || 0,
+            co2Saved: stats.co2Saved || 0
+          };
+        }
+        this.departmentStats = stats;
+      },
+      error: (err) => {
+        console.error('Failed to load department stats:', err);
       }
     });
   }
@@ -682,7 +766,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.activeTrucks.delete(vehicleId);
     const vehicle = this.selectedDeptVehicles.find(v => v.id === vehicleId);
     const vehicleName = vehicle?.reference || 'Vehicle';
-    alert(`${vehicleName} completed route! Collected ${binsCollected} bins`);
+    
+    // Add completion notification
+    this.addDashboardNotification({
+      type: 'route-completed',
+      title: 'Route Completed',
+      message: `${vehicleName} finished route and collected ${binsCollected} bins`,
+      data: { vehicleId, vehicleName, binsCollected }
+    });
+    
     this.loadDepartmentVehicles();
     
     // Auto-regenerate routes after vehicle completes
@@ -894,9 +986,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
     };
   }
 
-  // Convert BinNotification to generic Notification for NotificationBellComponent
+  // Convert all notifications to generic Notification for NotificationBellComponent
   getNotificationsForBell(): Notification[] {
-    return this.binNotifications.map(n => ({
+    // Bin notifications
+    const binNotifs = this.binNotifications.map(n => ({
       id: n.id,
       type: n.type === 'critical' ? 'error' as const : 'warning' as const,
       message: `Bin ${n.binId.slice(-6)} is at ${n.fillLevel}% capacity`,
@@ -904,6 +997,50 @@ export class DashboardComponent implements OnInit, OnDestroy {
       timestamp: n.timestamp,
       read: n.dismissed
     }));
+
+    // Dashboard notifications (route completions, vehicle availability)
+    const dashboardNotifs = this.dashboardNotifications.map(n => {
+      let type: 'success' | 'error' | 'warning' | 'info' = 'info';
+      if (n.type === 'route-completed') type = 'success';
+      else if (n.type === 'vehicle-available') type = 'info';
+      else if (n.type === 'vehicle-dispatched') type = 'success';
+      else if (n.type === 'bin-critical') type = 'error';
+      else if (n.type === 'bin-warning') type = 'warning';
+      
+      return {
+        id: n.id,
+        type,
+        message: n.message,
+        title: n.title,
+        timestamp: n.timestamp,
+        read: n.dismissed
+      };
+    });
+
+    // Combine and sort by timestamp (newest first)
+    return [...binNotifs, ...dashboardNotifs].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+  }
+
+  // Add a dashboard notification
+  private addDashboardNotification(notification: Omit<DashboardNotification, 'id' | 'timestamp' | 'dismissed'>): void {
+    const newNotification: DashboardNotification = {
+      ...notification,
+      id: `${notification.type}-${Date.now()}`,
+      timestamp: new Date(),
+      dismissed: false
+    };
+    
+    this.dashboardNotifications.unshift(newNotification);
+    this.unreadNotificationCount++;
+    
+    // Keep only last 50 notifications
+    if (this.dashboardNotifications.length > 50) {
+      this.dashboardNotifications = this.dashboardNotifications.slice(0, 50);
+    }
+    
+    this.cdr.detectChanges();
   }
 
   // Handle driver change from vehicle card
@@ -943,5 +1080,63 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.binNotifications.forEach(n => n.dismissed = false);
     this.unreadNotificationCount = 0;
     this.cdr.detectChanges();
+  }
+
+  // Auto-dispatch methods
+  loadAutoDispatchStatus(): void {
+    const departmentId = this.currentDepartmentId;
+    if (!departmentId) return;
+
+    this.routeService.getAutoDispatchStatus(departmentId).subscribe({
+      next: (status) => {
+        this.autoDispatchEnabled = status.enabled;
+        this.cdr.detectChanges();
+      },
+      error: (error) => {
+        console.error('Failed to load auto-dispatch status:', error);
+      }
+    });
+  }
+
+  toggleAutoDispatch(): void {
+    if (this.autoDispatchEnabled) {
+      this.routeService.disableAutoDispatch().subscribe({
+        next: () => {
+          this.autoDispatchEnabled = false;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('Failed to disable auto-dispatch:', error);
+        }
+      });
+    } else {
+      this.routeService.enableAutoDispatch().subscribe({
+        next: () => {
+          this.autoDispatchEnabled = true;
+          this.cdr.detectChanges();
+        },
+        error: (error) => {
+          console.error('Failed to enable auto-dispatch:', error);
+        }
+      });
+    }
+  }
+
+  triggerAutoDispatch(): void {
+    const departmentId = this.currentDepartmentId;
+    if (!departmentId) return;
+
+    this.routeService.triggerAutoDispatch(departmentId).subscribe({
+      next: (result) => {
+        console.log('Auto-dispatch triggered:', result);
+        // Refresh data after manual trigger
+        this.loadAvailableRoutes();
+        this.loadAvailableEmployees();
+        this.loadDepartmentVehicles();
+      },
+      error: (error) => {
+        console.error('Failed to trigger auto-dispatch:', error);
+      }
+    });
   }
 }

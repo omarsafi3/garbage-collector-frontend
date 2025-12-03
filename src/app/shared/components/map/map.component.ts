@@ -154,19 +154,42 @@ export class MapComponent implements OnInit, OnDestroy {
 
         this.truckPositionSub = this.webSocketService.getTruckPositionUpdates().subscribe(
       (update: TruckPositionUpdate) => {
-        if (this.activeTrucks.has(update.vehicleId)) {
-          this.updateTruckPosition(update.vehicleId, update.latitude, update.longitude, update.progressPercent);
-          this.refreshActiveRoutePolyline(update.vehicleId);  // ✅ ADD THIS LINE
+        // Auto-register vehicle if not already in activeTrucks (handles page refresh)
+        if (!this.activeTrucks.has(update.vehicleId)) {
+          this.activeTrucks.set(update.vehicleId, {
+            vehicleId: update.vehicleId,
+            progress: update.progressPercent || 0,
+            latitude: update.latitude,
+            longitude: update.longitude,
+            lastPolylineRefresh: 0
+          });
+          // Load the route polyline for this vehicle
+          this.routeService.getActiveRoute(update.vehicleId).subscribe({
+            next: (route: any) => {
+              if (route && route.fullRoutePolyline) {
+                this.drawRoutePolyline(route.fullRoutePolyline, update.vehicleId);
+              }
+            },
+            error: () => { /* Handle silently */ }
+          });
         }
+        this.updateTruckPosition(update.vehicleId, update.latitude, update.longitude, update.progressPercent);
+        this.refreshActiveRoutePolyline(update.vehicleId);
       }
     );
 
 
     this.routeProgressSub = this.webSocketService.getRouteProgressUpdates().subscribe(
       (update: RouteProgressUpdate) => {
-        if (this.activeTrucks.has(update.vehicleId)) {
-          this.showRouteProgress(update.vehicleId, update.currentStop, update.totalStops, update.vehicleFillLevel);
+        // Auto-register vehicle if not already in activeTrucks
+        if (!this.activeTrucks.has(update.vehicleId)) {
+          this.activeTrucks.set(update.vehicleId, {
+            vehicleId: update.vehicleId,
+            progress: 0,
+            lastPolylineRefresh: 0
+          });
         }
+        this.showRouteProgress(update.vehicleId, update.currentStop, update.totalStops, update.vehicleFillLevel);
       }
     );
 

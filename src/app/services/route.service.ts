@@ -144,4 +144,53 @@ export class RouteService {
   getActiveRoute(vehicleId: string): Observable<ActiveRoute> {
     return this.http.get<ActiveRoute>(`${this.baseUrl}/active-route/${vehicleId}`);
   }
+
+  // ==================== AUTO-DISPATCH ====================
+
+  /**
+   * Get auto-dispatch status for a department
+   */
+  getAutoDispatchStatus(departmentId: string): Observable<AutoDispatchStatus> {
+    return this.http.get<AutoDispatchStatus>(`${this.baseUrl}/auto-dispatch/status/${departmentId}`);
+  }
+
+  /**
+   * Manually trigger auto-dispatch for a department
+   */
+  triggerAutoDispatch(departmentId: string): Observable<AutoDispatchResult> {
+    return this.http.post<AutoDispatchResult>(`${this.baseUrl}/auto-dispatch/trigger/${departmentId}`, null);
+  }
+
+  /**
+   * Enable auto-dispatch globally
+   */
+  enableAutoDispatch(): Observable<{ message: string; enabled: boolean }> {
+    return this.http.post<{ message: string; enabled: boolean }>(`${this.baseUrl}/auto-dispatch/enable`, null);
+  }
+
+  /**
+   * Disable auto-dispatch globally
+   */
+  disableAutoDispatch(): Observable<{ message: string; enabled: boolean }> {
+    return this.http.post<{ message: string; enabled: boolean }>(`${this.baseUrl}/auto-dispatch/disable`, null);
+  }
+}
+
+// Auto-dispatch interfaces
+export interface AutoDispatchStatus {
+  enabled: boolean;
+  criticalThreshold: number;
+  minBinsForRoute: number;
+  availableRoutes: number;
+  availableVehicles: number;
+  availableDrivers: number;
+  availableCollectors: number;
+  canDispatch: boolean;
+}
+
+export interface AutoDispatchResult {
+  success: boolean;
+  vehiclesDispatched: number;
+  remainingRoutes: number;
+  message: string;
 }
