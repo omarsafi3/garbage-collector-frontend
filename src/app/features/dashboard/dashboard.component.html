@@ -1,0 +1,249 @@
+<div class="dashboard-container">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🚛</span>
+        <span class="logo-text">FleetOps</span>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">DEPARTMENT</div>
+      <div class="dept-card">
+        <div class="dept-icon">🏢</div>
+        <div class="dept-info">
+          <div class="dept-name">{{ selectedDepartment?.departmentName || 'Loading...' }}</div>
+          <div class="dept-status">
+            <span class="status-dot online"></span>
+            Online
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">QUICK STATS</div>
+      <div class="quick-stats">
+        <div class="quick-stat">
+          <div class="stat-icon critical">🚨</div>
+          <div class="stat-data">
+            <div class="stat-value">{{ departmentStats?.criticalBins || 0 }}</div>
+            <div class="stat-label">Critical</div>
+          </div>
+        </div>
+        <div class="quick-stat">
+          <div class="stat-icon active">🚛</div>
+          <div class="stat-data">
+            <div class="stat-value">{{ activeTrucks.size }}</div>
+            <div class="stat-label">Active</div>
+          </div>
+        </div>
+        <div class="quick-stat">
+          <div class="stat-icon fill">📊</div>
+          <div class="stat-data">
+            <div class="stat-value">{{ departmentStats?.averageFillLevel || 0 }}%</div>
+            <div class="stat-label">Avg Fill</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Employee Pool in Sidebar -->
+    <div class="sidebar-section employee-section">
+      <div class="section-label">
+        TEAM
+        <span class="team-count">{{ getTrulyAvailableEmployees().length }} ready</span>
+      </div>
+      
+      <div class="employee-mini-list">
+        <div class="employee-group">
+          <div class="group-header">
+            <span class="group-icon">🚛</span>
+            <span>Drivers</span>
+            <span class="count-badge driver">{{ getAvailableDrivers().length }}</span>
+          </div>
+          <div class="employee-chips">
+            <div class="employee-chip driver" *ngFor="let emp of getAvailableDrivers()">
+              {{ emp.firstName[0] }}{{ emp.lastName[0] }}
+            </div>
+            <div class="empty-chip" *ngIf="getAvailableDrivers().length === 0">None</div>
+          </div>
+        </div>
+        
+        <div class="employee-group">
+          <div class="group-header">
+            <span class="group-icon">🗑️</span>
+            <span>Collectors</span>
+            <span class="count-badge collector">{{ getAvailableCollectors().length }}</span>
+          </div>
+          <div class="employee-chips">
+            <div class="employee-chip collector" *ngFor="let emp of getAvailableCollectors()">
+              {{ emp.firstName[0] }}{{ emp.lastName[0] }}
+            </div>
+            <div class="empty-chip" *ngIf="getAvailableCollectors().length === 0">None</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="in-route-section" *ngIf="getEmployeesInTrucks().length > 0">
+        <div class="group-header muted">
+          <span>🔄 On Route</span>
+          <span class="count-badge muted">{{ getEmployeesInTrucks().length }}</span>
+        </div>
+        <div class="employee-chips">
+          <div class="employee-chip on-route" *ngFor="let emp of getEmployeesInTrucks()"
+               [title]="emp.firstName + ' ' + emp.lastName">
+            {{ emp.firstName[0] }}{{ emp.lastName[0] }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="logout-btn" (click)="authService.logout()">
+        <span>🚪</span>
+        <span>Logout</span>
+      </button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Top Header -->
+    <header class="top-header">
+      <div class="header-left">
+        <h1>Fleet Operations</h1>
+        <div class="live-indicator">
+          <span class="pulse"></span>
+          <span>Live</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <!-- Notification Bell Component -->
+        <app-notification-bell
+          [notifications]="getNotificationsForBell()"
+          [unreadCount]="unreadNotificationCount"
+          [showPanel]="showNotificationPanel"
+          (togglePanelChange)="onNotificationPanelToggle($event)"
+          (markAllRead)="onMarkAllNotificationsRead()"
+          (clearAll)="clearAllNotifications()">
+        </app-notification-bell>
+
+        <button class="action-btn primary" (click)="manualGenerateRoutes()">
+          <span>🔄</span>
+          <span>Generate Routes</span>
+        </button>
+        <button class="action-btn warning" (click)="checkCriticalBins()">
+          <span>🚨</span>
+          <span>Critical Bins</span>
+        </button>
+        <button class="action-btn secondary" (click)="openMapModal()">
+          <span>🗺️</span>
+          <span>Live Map</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- Content Grid -->
+    <div class="content-grid">
+      <!-- Vehicles Grid -->
+      <section class="panel vehicles-panel">
+        <div class="panel-header">
+          <h2>🚗 Fleet</h2>
+          <div class="panel-actions">
+            <span class="badge" *ngIf="activeTrucks.size > 0" class="badge success">{{ activeTrucks.size }} active</span>
+            <span class="badge">{{ selectedDeptVehicles.length }} trucks</span>
+            <button class="btn-dispatch-all" 
+                    (click)="dispatchAllAvailableWithEmployees()"
+                    [disabled]="getAvailableVehiclesOnly().length === 0">
+              🚀 Dispatch All ({{ getAvailableVehiclesOnly().length }})
+            </button>
+          </div>
+        </div>
+        
+        <div class="vehicles-grid">
+          <app-vehicle-card
+            *ngFor="let vehicle of selectedDeptVehicles; let i = index"
+            [config]="getVehicleCardConfig(vehicle)"
+            [index]="i"
+            (driverChanged)="onVehicleDriverChanged($event)"
+            (collectorChanged)="onVehicleCollectorChanged($event)"
+            (routeChanged)="onVehicleRouteChanged($event)"
+            (dispatch)="onVehicleDispatch($event)">
+          </app-vehicle-card>
+        </div>
+      </section>
+
+      <!-- Analytics Panel -->
+      <section class="panel analytics-panel" *ngIf="selectedDepartment && analyticsData">
+        <div class="panel-header">
+          <h2>📊 Analytics</h2>
+          <span class="badge muted">Last 30 days</span>
+        </div>
+        
+        <div class="analytics-cards">
+          <div class="analytics-card co2">
+            <div class="analytics-icon">🌍</div>
+            <div class="analytics-data">
+              <div class="analytics-value">{{ analyticsData.totalCO2EmissionsKg | number:'1.0-0' }} kg</div>
+              <div class="analytics-label">CO2 Emissions</div>
+              <div class="analytics-sub">🌳 {{ analyticsData.treesNeededToOffset | number:'1.0-0' }} trees to offset</div>
+            </div>
+          </div>
+
+          <div class="analytics-card cost">
+            <div class="analytics-icon">💰</div>
+            <div class="analytics-data">
+              <div class="analytics-value">€{{ analyticsData.totalCostEuros | number:'1.0-2' }}</div>
+              <div class="analytics-label">Total Cost</div>
+              <div class="analytics-sub">⛽ {{ analyticsData.totalFuelLiters | number:'1.0-0' }} L fuel</div>
+            </div>
+          </div>
+
+          <div class="analytics-card efficiency">
+            <div class="analytics-icon">⚡</div>
+            <div class="analytics-data">
+              <div class="analytics-value">{{ analyticsData.totalBinsCollected }}</div>
+              <div class="analytics-label">Bins Collected</div>
+              <div class="analytics-sub">📍 {{ analyticsData.totalDistanceKm | number:'1.0-1' }} km traveled</div>
+            </div>
+          </div>
+
+          <div class="analytics-card routes">
+            <div class="analytics-icon">🛣️</div>
+            <div class="analytics-data">
+              <div class="analytics-value">{{ analyticsData.totalRoutes }}</div>
+              <div class="analytics-label">Routes Completed</div>
+              <div class="analytics-sub">Avg: €{{ analyticsData.avgCostPerRoute | number:'1.0-2' }}/route</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Routes -->
+        <div class="recent-routes" *ngIf="recentRoutes.length > 0">
+          <h3>Recent Activity</h3>
+          <div class="route-history">
+            <div class="history-item" *ngFor="let route of recentRoutes">
+              <span class="history-vehicle">🚛 {{ route.vehicleReference }}</span>
+              <span class="history-stats">{{ route.binsCollected }} bins • {{ route.totalDistanceKm | number:'1.0-0' }} km</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Map Modal -->
+<div class="map-modal-overlay" [class.hidden]="!showMapModal" (click)="closeMapModal()">
+  <div class="map-modal-container" (click)="$event.stopPropagation()">
+    <div class="map-modal-header">
+      <h2>🗺️ Live Map</h2>
+      <button class="modal-close-btn" (click)="closeMapModal()">✕</button>
+    </div>
+    <div class="map-modal-body">
+      <app-map></app-map>
+    </div>
+  </div>
+</div>

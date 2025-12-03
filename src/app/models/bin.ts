@@ -1,4 +1,4 @@
-export type BinStatus = 'normal' | 'warning' | 'critical' | 'collected';
+export type BinStatus = 'normal' | 'warning' | 'critical' | 'collected' | 'active';
 
 export interface Bin {
   id: string;
@@ -6,6 +6,10 @@ export interface Bin {
   longitude: number;
   fillLevel: number;
   status: BinStatus;
-  lastCollected?: Date;
-  departmentId?: string;
+  lastEmptied?: string;
+  lastUpdated?: string;
+  department?: {
+    id: string;
+    name: string;
+  };
 }

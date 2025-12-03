@@ -1,0 +1,378 @@
+<div class="admin-container">
+  <!-- Header -->
+  <header class="admin-header">
+    <div class="header-left">
+      <h1>🏛️ Chief Admin Panel</h1>
+      <span class="role-badge">👑 SUPER_ADMIN</span>
+    </div>
+    <div class="header-right">
+      <span class="username">{{ authService.getCurrentUser()?.username }}</span>
+      <button class="logout-btn" (click)="logout()">🚪 Logout</button>
+    </div>
+  </header>
+
+  <!-- Main Layout: Map + Sidebar -->
+  <div class="admin-main">
+    
+    <!-- LEFT: Main Map with All Departments -->
+    <div class="map-section">
+      <div class="map-header">
+        <h2>🗺️ Department Map</h2>
+        <div class="map-actions">
+          <span class="dept-count">{{ departments.length }} Departments</span>
+          <button class="btn-primary" (click)="openAddDepartmentModal()">
+            ➕ Add Department
+          </button>
+        </div>
+      </div>
+      <div class="map-container">
+        <div id="admin-main-map"></div>
+        <div class="map-hint" *ngIf="!selectedDepartment">
+          👆 Click on a department to manage it
+        </div>
+      </div>
+      
+      <!-- Department List (below map) -->
+      <div class="department-list">
+        <div class="dept-list-header">
+          <h3>📋 All Departments</h3>
+        </div>
+        <div class="dept-list-items">
+          <div 
+            class="dept-list-item" 
+            *ngFor="let dept of departments"
+            [class.selected]="selectedDepartment?.id === dept.id"
+            (click)="selectDepartment(dept)"
+          >
+            <div class="dept-item-info">
+              <span class="dept-item-name">🏢 {{ dept.name }}</span>
+              <span class="dept-item-coords">📍 {{ dept.latitude.toFixed(4) }}, {{ dept.longitude.toFixed(4) }}</span>
+            </div>
+            <button class="btn-icon danger" (click)="deleteDepartment(dept.id); $event.stopPropagation()">🗑️</button>
+          </div>
+          <div class="empty-state-small" *ngIf="departments.length === 0">
+            No departments yet. Click "Add Department" to create one.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Department Details Panel -->
+    <div class="detail-panel" [class.active]="selectedDepartment">
+      
+      <!-- No Selection State -->
+      <div class="no-selection" *ngIf="!selectedDepartment">
+        <div class="no-selection-icon">🏢</div>
+        <h3>Select a Department</h3>
+        <p>Click on a department marker on the map or from the list to manage its vehicles and employees</p>
+      </div>
+
+      <!-- Department Selected -->
+      <div class="department-detail" *ngIf="selectedDepartment">
+        <!-- Department Header -->
+        <div class="detail-header">
+          <button class="btn-back" (click)="deselectDepartment()">← Back</button>
+          <div class="detail-title">
+            <h2>🏢 {{ selectedDepartment.name }}</h2>
+            <span class="coords-badge">📍 {{ selectedDepartment.latitude.toFixed(4) }}, {{ selectedDepartment.longitude.toFixed(4) }}</span>
+          </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="detail-stats">
+          <div class="detail-stat vehicles">
+            <div class="stat-value">{{ departmentVehicles.length }}</div>
+            <div class="stat-label">Vehicles</div>
+          </div>
+          <div class="detail-stat employees">
+            <div class="stat-value">{{ departmentEmployees.length }}</div>
+            <div class="stat-label">Employees</div>
+          </div>
+          <div class="detail-stat bins">
+            <div class="stat-value">{{ departmentBins.length }}</div>
+            <div class="stat-label">Bins</div>
+          </div>
+          <div class="detail-stat available">
+            <div class="stat-value">{{ getAvailableVehiclesCount() }}</div>
+            <div class="stat-label">Ready</div>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="detail-tabs">
+          <button 
+            [class.active]="activeTab === 'vehicles'"
+            (click)="activeTab = 'vehicles'"
+          >
+            🚛 Vehicles ({{ departmentVehicles.length }})
+          </button>
+          <button 
+            [class.active]="activeTab === 'employees'"
+            (click)="activeTab = 'employees'"
+          >
+            👷 Employees ({{ departmentEmployees.length }})
+          </button>
+          <button 
+            [class.active]="activeTab === 'bins'"
+            (click)="activeTab = 'bins'"
+          >
+            🗑️ Bins ({{ departmentBins.length }})
+          </button>
+        </div>
+
+        <!-- Vehicles Tab Content -->
+        <div class="tab-content" *ngIf="activeTab === 'vehicles'">
+          <div class="content-header">
+            <button class="btn-primary small" (click)="openAddVehicleModal()">
+              ➕ Add Vehicle
+            </button>
+          </div>
+          
+          <div class="items-list">
+            <div class="vehicle-item" *ngFor="let vehicle of departmentVehicles">
+              <div class="item-icon">🚛</div>
+              <div class="item-info">
+                <div class="item-name">{{ vehicle.reference }}</div>
+                <div class="item-detail">{{ vehicle.plate }}</div>
+              </div>
+              <div class="item-badges">
+                <span class="status-badge" [class.available]="vehicle.available" [class.busy]="!vehicle.available">
+                  {{ vehicle.available ? '✅ Ready' : '⏸️ ' + (vehicle.status || 'Busy') }}
+                </span>
+                <span class="fill-badge" *ngIf="vehicle.fillLevel !== undefined">
+                  🗑️ {{ vehicle.fillLevel }}%
+                </span>
+              </div>
+              <button class="btn-icon danger" (click)="deleteVehicle(vehicle.id!)">🗑️</button>
+            </div>
+            
+            <div class="empty-state-small" *ngIf="departmentVehicles.length === 0">
+              No vehicles in this department. Add one to get started.
+            </div>
+          </div>
+        </div>
+
+        <!-- Employees Tab Content -->
+        <div class="tab-content" *ngIf="activeTab === 'employees'">
+          <div class="content-header">
+            <div class="content-header-info">
+              <span class="role-count driver">🚛 {{ getDriversCount() }} Drivers</span>
+              <span class="role-count collector">🗑️ {{ getCollectorsCount() }} Collectors</span>
+            </div>
+            <button class="btn-primary small" (click)="openAddEmployeeModal()">
+              ➕ Add Employee
+            </button>
+          </div>
+          
+          <div class="items-list">
+            <div class="employee-item" *ngFor="let emp of departmentEmployees">
+              <div class="item-icon">{{ emp.role === 'DRIVER' ? '🚛' : '🗑️' }}</div>
+              <div class="item-info">
+                <div class="item-name">{{ emp.firstName }} {{ emp.lastName }}</div>
+                <div class="item-detail">
+                  <span class="role-tag" [class.driver]="emp.role === 'DRIVER'" [class.collector]="emp.role === 'COLLECTOR'">
+                    {{ emp.role }}
+                  </span>
+                </div>
+              </div>
+              <div class="item-badges">
+                <span class="status-badge" [class.available]="emp.available" [class.busy]="!emp.available">
+                  {{ emp.available ? '✅ Available' : '🚛 Assigned' }}
+                </span>
+              </div>
+              <button class="btn-icon danger" (click)="deleteEmployee(emp.id)">🗑️</button>
+            </div>
+            
+            <div class="empty-state-small" *ngIf="departmentEmployees.length === 0">
+              No employees in this department. Add one to get started.
+            </div>
+          </div>
+        </div>
+
+        <!-- Bins Tab Content -->
+        <div class="tab-content" *ngIf="activeTab === 'bins'">
+          <div class="content-header">
+            <button class="btn-primary small" (click)="openAddBinModal()">
+              ➕ Add Bin
+            </button>
+          </div>
+          
+          <div class="items-list">
+            <div class="bin-item" *ngFor="let bin of departmentBins">
+              <div class="item-icon">🗑️</div>
+              <div class="item-info">
+                <div class="item-name">📍 {{ bin.latitude.toFixed(4) }}, {{ bin.longitude.toFixed(4) }}</div>
+                <div class="item-detail">Status: {{ bin.status }}</div>
+              </div>
+              <div class="item-badges">
+                <span class="fill-badge" [class.low]="bin.fillLevel < 50" [class.medium]="bin.fillLevel >= 50 && bin.fillLevel < 80" [class.high]="bin.fillLevel >= 80">
+                  🗑️ {{ bin.fillLevel }}%
+                </span>
+              </div>
+              <button class="btn-icon danger" (click)="deleteBin(bin.id)">🗑️</button>
+            </div>
+            
+            <div class="empty-state-small" *ngIf="departmentBins.length === 0">
+              No bins in this department. Add one to get started.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= ADD DEPARTMENT MODAL ============= -->
+  <div class="modal-overlay" *ngIf="showAddDepartmentModal" (click)="closeDepartmentModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <h2>🏢 Add New Department</h2>
+      <p>Enter department name and click on the map to select its location</p>
+      
+      <div class="form-group">
+        <label>Department Name</label>
+        <input 
+          type="text" 
+          [(ngModel)]="newDepartment.name" 
+          placeholder="e.g., North District Office"
+          class="form-input"
+        >
+      </div>
+
+      <div class="location-picker">
+        <div class="location-picker-header">
+          <label>Location</label>
+          <span 
+            class="location-display"
+            [class.not-set]="!newDepartment.latitude || !newDepartment.longitude"
+          >
+            {{ newDepartment.latitude && newDepartment.longitude 
+               ? '📍 ' + newDepartment.latitude.toFixed(4) + ', ' + newDepartment.longitude.toFixed(4) 
+               : '⚠️ Click on map to set location' }}
+          </span>
+        </div>
+        <div class="mini-map-container">
+          <div id="location-picker-map"></div>
+          <div class="map-instructions">👆 Click anywhere to place department</div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button (click)="closeDepartmentModal()" class="btn-secondary">Cancel</button>
+        <button (click)="saveDepartment()" class="btn-primary">💾 Save Department</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= ADD VEHICLE MODAL ============= -->
+  <div class="modal-overlay" *ngIf="showAddVehicleModal" (click)="closeVehicleModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <h2>🚛 Add Vehicle to {{ selectedDepartment?.name }}</h2>
+      <p>Enter vehicle details</p>
+      
+      <div class="form-group">
+        <label>Plate Number *</label>
+        <input 
+          type="text" 
+          [(ngModel)]="newVehicle.plate" 
+          placeholder="e.g., TUN-1234"
+          class="form-input"
+        >
+      </div>
+
+      <div class="form-group">
+        <label>Reference Name</label>
+        <input 
+          type="text" 
+          [(ngModel)]="newVehicle.reference" 
+          placeholder="e.g., TRUCK-01 (auto-generated if empty)"
+          class="form-input"
+        >
+      </div>
+      
+      <div class="modal-actions">
+        <button (click)="closeVehicleModal()" class="btn-secondary">Cancel</button>
+        <button (click)="saveVehicle()" class="btn-primary">💾 Save Vehicle</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= ADD EMPLOYEE MODAL ============= -->
+  <div class="modal-overlay" *ngIf="showAddEmployeeModal" (click)="closeEmployeeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <h2>👷 Add Employee to {{ selectedDepartment?.name }}</h2>
+      <p>Enter employee details</p>
+      
+      <div class="form-group">
+        <label>First Name *</label>
+        <input 
+          type="text" 
+          [(ngModel)]="newEmployee.firstName" 
+          placeholder="e.g., John"
+          class="form-input"
+        >
+      </div>
+
+      <div class="form-group">
+        <label>Last Name *</label>
+        <input 
+          type="text" 
+          [(ngModel)]="newEmployee.lastName" 
+          placeholder="e.g., Doe"
+          class="form-input"
+        >
+      </div>
+
+      <div class="form-group">
+        <label>Role *</label>
+        <select [(ngModel)]="newEmployee.role" class="form-select">
+          <option value="DRIVER">🚛 Driver</option>
+          <option value="COLLECTOR">🗑️ Collector</option>
+        </select>
+        <span class="form-hint">A vehicle requires at least 1 Driver + 1 Collector to dispatch</span>
+      </div>
+
+      <div class="form-group">
+        <div class="form-checkbox">
+          <input type="checkbox" [(ngModel)]="newEmployee.available" id="available">
+          <span>Available for assignment</span>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button (click)="closeEmployeeModal()" class="btn-secondary">Cancel</button>
+        <button (click)="saveEmployee()" class="btn-primary">💾 Save Employee</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============= ADD BIN MODAL ============= -->
+  <div class="modal-overlay" *ngIf="showAddBinModal" (click)="closeBinModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <h2>🗑️ Add Bin to {{ selectedDepartment?.name }}</h2>
+      <p>Click on the map to place the bin location</p>
+
+      <div class="location-picker">
+        <div class="location-picker-header">
+          <label>Bin Location</label>
+          <span 
+            class="location-display"
+            [class.not-set]="!newBin.latitude || !newBin.longitude"
+          >
+            {{ newBin.latitude && newBin.longitude 
+               ? '📍 ' + newBin.latitude.toFixed(4) + ', ' + newBin.longitude.toFixed(4) 
+               : '⚠️ Click on map to set location' }}
+          </span>
+        </div>
+        <div class="mini-map-container">
+          <div id="bin-picker-map"></div>
+          <div class="map-instructions">👆 Click anywhere to place bin</div>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button (click)="closeBinModal()" class="btn-secondary">Cancel</button>
+        <button (click)="saveBin()" class="btn-primary">💾 Save Bin</button>
+      </div>
+    </div>
+  </div>
+</div>

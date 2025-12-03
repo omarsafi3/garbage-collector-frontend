@@ -15,10 +15,20 @@ export class BinService {
   getAllBins(): Observable<Bin[]> {
     return this.http.get<Bin[]>(this.apiUrl);
   }
+
+  getBinsByDepartment(departmentId: string): Observable<Bin[]> {
+    return this.http.get<Bin[]>(`${this.apiUrl}/department/${departmentId}`);
+  }
+
   createBin(bin: Partial<Bin>): Observable<Bin> {
-  return this.http.post<Bin>(this.apiUrl, bin);
-}
+    return this.http.post<Bin>(this.apiUrl, bin);
+  }
 
+  updateBin(id: string, bin: Partial<Bin>): Observable<Bin> {
+    return this.http.put<Bin>(`${this.apiUrl}/${id}`, bin);
+  }
 
-
+  deleteBin(id: string): Observable<void> {
+    return this.http.delete<void>(`${this.apiUrl}/${id}`);
+  }
 }

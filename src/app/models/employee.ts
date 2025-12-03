@@ -1,4 +1,5 @@
 export type EmployeeStatus = 'AVAILABLE' | 'ASSIGNED' | 'IN_ROUTE';
+export type EmployeeRole = 'DRIVER' | 'COLLECTOR';
 
 export interface Employee {
   id: string;
@@ -6,11 +7,10 @@ export interface Employee {
   lastName: string;
   available: boolean;
   status?: EmployeeStatus;
-  role?: string;
+  role: EmployeeRole;
   assignedVehicleId?: string;
-  departmentId?: string;
   department?: {
-    id?: string;
+    id: string;
     name: string;
     latitude?: number;
     longitude?: number;
