@@ -126,8 +126,8 @@ export class AdminComponent implements OnInit, OnDestroy {
     if (!isPlatformBrowser(this.platformId)) return;
 
     try {
-      this.L = await import('leaflet');
-      
+      const leafletModule = await import('leaflet');
+      this.L = leafletModule.default || leafletModule;
       const mapContainer = document.getElementById('admin-main-map');
       if (!mapContainer) return;
 
@@ -439,7 +439,8 @@ export class AdminComponent implements OnInit, OnDestroy {
 
     try {
       if (!this.L) {
-        this.L = await import('leaflet');
+        const leafletModule = await import('leaflet');
+        this.L = leafletModule.default || leafletModule;
       }
       
       const mapContainer = document.getElementById('location-picker-map');
@@ -683,7 +684,8 @@ export class AdminComponent implements OnInit, OnDestroy {
 
     try {
       if (!this.L) {
-        this.L = await import('leaflet');
+        const leafletModule = await import('leaflet');
+        this.L = leafletModule.default || leafletModule;
       }
       
       const mapContainer = document.getElementById('bin-picker-map');

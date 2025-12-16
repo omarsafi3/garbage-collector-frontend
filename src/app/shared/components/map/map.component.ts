@@ -61,7 +61,8 @@ export class MapComponent implements OnInit, OnDestroy {
 
   async ngOnInit() {
     if (isPlatformBrowser(this.platformId)) {
-      this.L = await import('leaflet');
+      const leafletModule = await import('leaflet');
+      this.L = leafletModule.default || leafletModule;
       this.initMap(this.L);
       this.loadDepartments(this.L);
       this.loadBins(this.L);

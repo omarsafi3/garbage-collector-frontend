@@ -8,7 +8,7 @@ import { environment } from '../../environments/environment';
   providedIn: 'root'
 })
 export class BinService {
-  private readonly apiUrl = `${environment.apiUrl}/bins`;
+  private readonly apiUrl = `${environment.apiUrl}/api/bins`;
 
   constructor(private http: HttpClient) {}
 

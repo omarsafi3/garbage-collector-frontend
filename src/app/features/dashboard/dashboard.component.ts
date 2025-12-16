@@ -98,7 +98,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private notifiedVehicleAvailability: Set<string> = new Set();
 
   // Auto-dispatch
-  autoDispatchEnabled = true;
+  autoDispatchEnabled = false;
+  // Feature flag to completely disable auto-dispatch behaviour in the UI/code
+  private readonly autoDispatchFeatureEnabled = false;
   private autoDispatchSub?: Subscription;
 
   private get currentDepartmentId(): string {
@@ -122,7 +124,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.setupWebSocketListeners();
     this.loadAvailableRoutes();
     this.loadAvailableEmployees();
-    this.loadAutoDispatchStatus();
+    if (this.autoDispatchFeatureEnabled) {
+      this.loadAutoDispatchStatus();
+    }
 
     setTimeout(() => {
       this.showAllRoutes();
@@ -452,16 +456,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     );
 
     // Subscribe to auto-dispatch events
-    this.autoDispatchSub = this.webSocketService.getAutoDispatchUpdates().subscribe(
-      (event) => {
-        console.log('Auto-dispatch event received:', event);
-        // Refresh routes and vehicles when auto-dispatch occurs
-        this.loadAvailableRoutes();
-        this.loadAvailableEmployees();
-        this.loadDepartmentVehicles();
-        this.cdr.detectChanges();
-      }
-    );
+    if (this.autoDispatchFeatureEnabled) {
+      this.autoDispatchSub = this.webSocketService.getAutoDispatchUpdates().subscribe(
+        (event) => {
+          console.log('Auto-dispatch event received:', event);
+          // Refresh routes and vehicles when auto-dispatch occurs
+          this.loadAvailableRoutes();
+          this.loadAvailableEmployees();
+          this.loadDepartmentVehicles();
+          this.cdr.detectChanges();
+        }
+      );
+    }
   }
 
   private checkBinForNotification(bin: Bin): void {
@@ -1084,6 +1090,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   // Auto-dispatch methods
   loadAutoDispatchStatus(): void {
+    if (!this.autoDispatchFeatureEnabled) {
+      this.autoDispatchEnabled = false;
+      return;
+    }
+
     const departmentId = this.currentDepartmentId;
     if (!departmentId) return;
 
@@ -1099,6 +1110,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAutoDispatch(): void {
+    if (!this.autoDispatchFeatureEnabled) {
+      console.warn('Auto-dispatch feature is disabled in this build.');
+      return;
+    }
+
     if (this.autoDispatchEnabled) {
       this.routeService.disableAutoDispatch().subscribe({
         next: () => {
@@ -1123,6 +1139,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   triggerAutoDispatch(): void {
+    if (!this.autoDispatchFeatureEnabled) {
+      console.warn('Auto-dispatch feature is disabled in this build.');
+      return;
+    }
+
     const departmentId = this.currentDepartmentId;
     if (!departmentId) return;
 
